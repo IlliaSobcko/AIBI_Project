@@ -261,14 +261,14 @@ async def run_core_logic():
 
         # Wait for draft bot to initialize
         print(f"\n[INIT CHECK] Waiting for draft bot initialization...")
-        max_wait = 50  # 5 seconds max
+        max_wait = 100  # 10 seconds max (increased from 5)
         for i in range(max_wait):
             if DRAFT_BOT is not None:
                 print(f"[INIT CHECK] [OK] Draft bot ready after {i*0.1:.1f}s")
                 break
             await asyncio.sleep(0.1)
         else:
-            print(f"[INIT CHECK] [WARN]  Draft bot still initializing (>5s), proceeding anyway")
+            print(f"[INIT CHECK] [WARN] Draft bot still initializing (>10s), but proceeding anyway")
 
         print(f"\n[DIALOGS] Fetching chat list...")
         dialogs = await collector.list_dialogs(limit=15)
@@ -340,10 +340,13 @@ async def run_core_logic():
             print(f"{'='*80}")
 
             # === FORCED DEBUG OUTPUT ===
-            # Show what we're processing
+            # Show what we're processing (sanitize emoji for Windows console)
             message_preview = h.text[:150].replace('\n', ' ')
+            # Remove emoji and special characters for Windows console compatibility
+            import re
+            message_preview = re.sub(r'[^\w\s\-\.,:;!?а-яА-Я]', '', message_preview, flags=re.UNICODE)
             print(f"[INPUT] Message received: '{message_preview}...'")
-            print(f"[INPUT] Chat ID: {h.chat_id}, Sender: {h.sender}")
+            print(f"[INPUT] Chat: {h.chat_title} (ID: {h.chat_id})")
 
             # MESSAGE ACCUMULATION: Add to accumulator (7 second window)
             message_accumulator.add_message(h)

@@ -1,0 +1,350 @@
+[DEBUG] Flask app instance created: 1960139032944
+[SCHEDULER] Auto-analysis DISABLED (manual mode only)
+[DEBUG] register_blueprints() called
+[DEBUG] Imported blueprints. web_bp routes: 3, api_bp routes: 12
+[DEBUG] Blueprints registered successfully
+================================================================================
+MANUAL TEST TRIGGER - run_core_logic()
+================================================================================
+
+This will process all messages with VERBOSE debugging output.
+Watch the console for detailed logs showing:
+  - Which chats are being processed
+  - AI confidence scores
+  - Smart Logic decisions
+  - Draft generation
+  - Message sending attempts
+  - Telegram service status
+
+================================================================================
+
+[2026-02-07 13:50:57.261608] >>> «апуск циклу анал≥зу...
+
+[SESSION VERIFY] Checking Telegram session authentication...
+[SESSION VERIFY] [OK] Authenticated as: UFO
+[SESSION VERIFY] User ID: 8040716622
+[SESSION VERIFY] [ERROR] Failed to verify session: 'User' object has no attribute 'is_bot'
+[SESSION VERIFY] Messages may not send correctly
+
+[INIT CHECK] Waiting for draft bot initialization...
+[INIT CHECK] [WARN]  Draft bot still initializing (>5s), proceeding anyway
+
+[DIALOGS] Fetching chat list...
+[DIALOGS] Found 8 chats
+[HISTORY] Collecting messages from last 7 days...
+[HISTORY] Collected 6 messages
+[GOOGLE CALENDAR] Successfully authenticated using Service Account
+[GOOGLE CALENDAR] Project: my-project-aibi-485600
+[GOOGLE CALENDAR] Service Account Email: calendar-bot@my-project-aibi-485600.iam.gserviceaccount.com
+[SMART_LOGIC] DataSourceManager initialized
+  Calendar available: True
+  Trello available: True
+  Business data: 2792 chars
+[SMART_LOGIC] DecisionEngine initialized
+  Confidence threshold: 90%
+  Weights: AI=0.6, Cal=0.2, Trello=0.1, Prices=0.1
+[MAIN] [OK] Smart Logic Decision Engine initialized successfully
+[WARNING] Draft bot not available - drafts will NOT be sent
+
+================================================================================
+[PROCESS START] Chat: 'Send_Message_telegram' (ID: 8244511048)
+[PROCESS START] Message length: 643 chars
+================================================================================
+[INPUT] Message received: '2026-02-03T20:39:4800:00 start 2026-02-03T20:39:5900:00 45347 2026-02-03T20:40:0000:00  Congratulations UFO!  telegram-send is now ready f...'
+[INPUT] Chat: Send_Message_telegram (ID: 8244511048)
+[AI ANALYSIS] Starting analysis for 'Send_Message_telegram'...
+[AI_CLIENT] [PARSE] Extracted confidence: 98% from AI response
+[AI ANALYSIS] Completed. Confidence: 98%
+[OK] Processed: Send_Message_telegram
+[DECISION] Starting decision engine evaluation...
+  - AI Confidence: 98%
+  - Auto-reply threshold: 85%
+  - Working hours: True
+  - Has unreadable files: False
+[DECISION] Evaluating with Smart Logic...
+  - Trello available: True
+  - Calendar available: True
+[SMART_LOGIC] Evaluation: AI=98, Cal=70, Trello=50, Prices=50 -> Final=82
+[SMART_LOGIC] Component Scores:
+  - AI Analysis: 98%
+  - Calendar: 70%
+  - Trello: 50%
+  - Price List: 50%
+[SMART_LOGIC] Final Score: 82%
+[SMART_LOGIC] Needs Manual Review: True
+[SMART_LOGIC] Result:
+  - Base Confidence: 98%
+  - Final Confidence: 82%
+  - Needs Manual Review: True
+  - Data Sources: {'ai': 98, 'calendar': 70, 'trello': 50, 'price_list': 50}
+
+[ACTION] Decision Logic:
+  - Final Confidence: 82%
+  - Auto-reply Threshold: 85%
+  - Working Hours: True
+  - Needs Manual Review: True
+  - Has Unreadable Files: False
+  - Draft Bot Available: False
+
+[PATH: NO ACTION]
+  - Needs manual review: True
+  - Draft bot available: False
+  - Final confidence: 82%
+  - No action taken for this message
+[ACTION] REASON: Draft bot NOT AVAILABLE - cannot send draft for manual review
+[ACTION] STATUS: Message queued for retry when bot is ready
+[TRELLO] —творено картку: Send_Message_telegram
+
+================================================================================
+[PROCESS START] Chat: 'AIBI_Secretary_Bot' (ID: 8559587930)
+[PROCESS START] Message length: 31123 chars
+================================================================================
+[INPUT] Message received: '2026-02-02T22:11:5400:00  SYSTEM RESTARTED   Bot is now ONLINE and ready to receive commands  Status:    Bot API: Connected    Token: Valid   ...'
+[INPUT] Chat: AIBI_Secretary_Bot (ID: 8559587930)
+[AI ANALYSIS] Starting analysis for 'AIBI_Secretary_Bot'...
+[AI_CLIENT] [PARSE] Extracted confidence: 98% from AI response
+[AI ANALYSIS] Completed. Confidence: 98%
+[OK] Processed: AIBI_Secretary_Bot
+[DECISION] Starting decision engine evaluation...
+  - AI Confidence: 98%
+  - Auto-reply threshold: 85%
+  - Working hours: True
+  - Has unreadable files: False
+[DECISION] Evaluating with Smart Logic...
+  - Trello available: True
+  - Calendar available: True
+[SMART_LOGIC] Evaluation: AI=98, Cal=70, Trello=50, Prices=85 -> Final=86
+[SMART_LOGIC] Component Scores:
+  - AI Analysis: 98%
+  - Calendar: 70%
+  - Trello: 50%
+  - Price List: 85%
+[SMART_LOGIC] Final Score: 86%
+[SMART_LOGIC] Needs Manual Review: True
+[SMART_LOGIC] Result:
+  - Base Confidence: 98%
+  - Final Confidence: 86%
+  - Needs Manual Review: True
+  - Data Sources: {'ai': 98, 'calendar': 70, 'trello': 50, 'price_list': 85}
+
+[ACTION] Decision Logic:
+  - Final Confidence: 86%
+  - Auto-reply Threshold: 85%
+  - Working Hours: True
+  - Needs Manual Review: True
+  - Has Unreadable Files: False
+  - Draft Bot Available: False
+
+[PATH: NO ACTION]
+  - Needs manual review: True
+  - Draft bot available: False
+  - Final confidence: 86%
+  - No action taken for this message
+[ACTION] REASON: Draft bot NOT AVAILABLE - cannot send draft for manual review
+[ACTION] STATUS: Message queued for retry when bot is ready
+[TRELLO] —творено картку: AIBI_Secretary_Bot
+
+================================================================================
+[PROCESS START] Chat: '≤лл€' (ID: 526791303)
+[PROCESS START] Message length: 659 chars
+================================================================================
+[INPUT] Message received: '2026-02-01T22:53:2800:00 Rr 2026-02-01T22:54:2900:00 б≥знес послуги надаЇте? 2026-02-07T01:16:2800:00 –озкажи про ц≥ни на твоњ послуги 2026-...'
+[INPUT] Chat: ≤лл€ (ID: 526791303)
+[AI ANALYSIS] Starting analysis for '≤лл€'...
+[AI_CLIENT] [PARSE] Extracted confidence: 98% from AI response
+[AI ANALYSIS] Completed. Confidence: 98%
+[OK] Processed: ≤лл€
+[DECISION] Starting decision engine evaluation...
+  - AI Confidence: 98%
+  - Auto-reply threshold: 85%
+  - Working hours: True
+  - Has unreadable files: False
+[DECISION] Evaluating with Smart Logic...
+  - Trello available: True
+  - Calendar available: True
+[SMART_LOGIC] Evaluation: AI=98, Cal=70, Trello=50, Prices=50 -> Final=82
+[SMART_LOGIC] Component Scores:
+  - AI Analysis: 98%
+  - Calendar: 70%
+  - Trello: 50%
+  - Price List: 50%
+[SMART_LOGIC] Final Score: 82%
+[SMART_LOGIC] Needs Manual Review: True
+[SMART_LOGIC] Result:
+  - Base Confidence: 98%
+  - Final Confidence: 82%
+  - Needs Manual Review: True
+  - Data Sources: {'ai': 98, 'calendar': 70, 'trello': 50, 'price_list': 50}
+
+[ACTION] Decision Logic:
+  - Final Confidence: 82%
+  - Auto-reply Threshold: 85%
+  - Working Hours: True
+  - Needs Manual Review: True
+  - Has Unreadable Files: False
+  - Draft Bot Available: False
+
+[PATH: NO ACTION]
+  - Needs manual review: True
+  - Draft bot available: False
+  - Final confidence: 82%
+  - No action taken for this message
+[ACTION] REASON: Draft bot NOT AVAILABLE - cannot send draft for manual review
+[ACTION] STATUS: Message queued for retry when bot is ready
+[TRELLO] —творено картку: ≤лл€
+
+================================================================================
+[PROCESS START] Chat: 'Telegram' (ID: 777000)
+[PROCESS START] Message length: 961 chars
+================================================================================
+[INPUT] Message received: '2026-02-06T00:36:3700:00 Login code: 66755. Do not give this code to anyone, even if they say they are from Telegram!  This code can be used to l...'
+[INPUT] Chat: Telegram (ID: 777000)
+[AI ANALYSIS] Starting analysis for 'Telegram'...
+[AI_CLIENT] [PARSE] Extracted confidence: 92% from AI response
+[AI ANALYSIS] Completed. Confidence: 92%
+[OK] Processed: Telegram
+[DECISION] Starting decision engine evaluation...
+  - AI Confidence: 92%
+  - Auto-reply threshold: 85%
+  - Working hours: True
+  - Has unreadable files: False
+[DECISION] Evaluating with Smart Logic...
+  - Trello available: True
+  - Calendar available: True
+[SMART_LOGIC] Evaluation: AI=92, Cal=70, Trello=50, Prices=50 -> Final=79
+[SMART_LOGIC] Component Scores:
+  - AI Analysis: 92%
+  - Calendar: 70%
+  - Trello: 50%
+  - Price List: 50%
+[SMART_LOGIC] Final Score: 79%
+[SMART_LOGIC] Needs Manual Review: True
+[SMART_LOGIC] Result:
+  - Base Confidence: 92%
+  - Final Confidence: 79%
+  - Needs Manual Review: True
+  - Data Sources: {'ai': 92, 'calendar': 70, 'trello': 50, 'price_list': 50}
+
+[ACTION] Decision Logic:
+  - Final Confidence: 79%
+  - Auto-reply Threshold: 85%
+  - Working Hours: True
+  - Needs Manual Review: True
+  - Has Unreadable Files: False
+  - Draft Bot Available: False
+
+[PATH: NO ACTION]
+  - Needs manual review: True
+  - Draft bot available: False
+  - Final confidence: 79%
+  - No action taken for this message
+[ACTION] REASON: Draft bot NOT AVAILABLE - cannot send draft for manual review
+[ACTION] STATUS: Message queued for retry when bot is ready
+[TRELLO] —творено картку: Telegram
+[GOOGLE CALENDAR] Creating reminder for: Telegram
+[GOOGLE CALENDAR] Event created: mbnk9dimngfai4eif1ei0jutc4 - [92%] Report Review: Telegram
+[CALENDAR] —творено нагадуванн€: Telegram
+
+================================================================================
+[PROCESS START] Chat: 'BotFather' (ID: 93372553)
+[PROCESS START] Message length: 2587 chars
+================================================================================
+[INPUT] Message received: '2026-02-02T21:56:5500:00 start 2026-02-02T21:56:5500:00 I can help you create and manage Telegram bots. If youre new to the Bot API, please se...'
+[INPUT] Chat: BotFather (ID: 93372553)
+[AI ANALYSIS] Starting analysis for 'BotFather'...
+[AI_CLIENT] [PARSE] Extracted confidence: 98% from AI response
+[AI ANALYSIS] Completed. Confidence: 98%
+[OK] Processed: BotFather
+[DECISION] Starting decision engine evaluation...
+  - AI Confidence: 98%
+  - Auto-reply threshold: 85%
+  - Working hours: True
+  - Has unreadable files: False
+[DECISION] Evaluating with Smart Logic...
+  - Trello available: True
+  - Calendar available: True
+[SMART_LOGIC] Evaluation: AI=98, Cal=70, Trello=50, Prices=50 -> Final=82
+[SMART_LOGIC] Component Scores:
+  - AI Analysis: 98%
+  - Calendar: 70%
+  - Trello: 50%
+  - Price List: 50%
+[SMART_LOGIC] Final Score: 82%
+[SMART_LOGIC] Needs Manual Review: True
+[SMART_LOGIC] Result:
+  - Base Confidence: 98%
+  - Final Confidence: 82%
+  - Needs Manual Review: True
+  - Data Sources: {'ai': 98, 'calendar': 70, 'trello': 50, 'price_list': 50}
+
+[ACTION] Decision Logic:
+  - Final Confidence: 82%
+  - Auto-reply Threshold: 85%
+  - Working Hours: True
+  - Needs Manual Review: True
+  - Has Unreadable Files: False
+  - Draft Bot Available: False
+
+[PATH: NO ACTION]
+  - Needs manual review: True
+  - Draft bot available: False
+  - Final confidence: 82%
+  - No action taken for this message
+[ACTION] REASON: Draft bot NOT AVAILABLE - cannot send draft for manual review
+[ACTION] STATUS: Message queued for retry when bot is ready
+[TRELLO] —творено картку: BotFather
+
+================================================================================
+[PROCESS START] Chat: 'User Info Х Get ID Х idbot' (ID: 52504489)
+[PROCESS START] Message length: 225 chars
+================================================================================
+[INPUT] Message received: '2026-02-02T21:37:1900:00 start 2026-02-02T21:37:2000:00 Id: 8040716622 First: UFO Lang: en Registered: Check Date   Explanations and answers F...'
+[INPUT] Chat: User Info Х Get ID Х idbot (ID: 52504489)
+[AI ANALYSIS] Starting analysis for 'User Info Х Get ID Х idbot'...
+[AI_CLIENT] [PARSE] Extracted confidence: 15% from AI response
+[AI ANALYSIS] Completed. Confidence: 15%
+[OK] Processed: User Info Х Get ID Х idbot
+[DECISION] Starting decision engine evaluation...
+  - AI Confidence: 15%
+  - Auto-reply threshold: 85%
+  - Working hours: True
+  - Has unreadable files: False
+[DECISION] Evaluating with Smart Logic...
+  - Trello available: True
+  - Calendar available: True
+[SMART_LOGIC] Evaluation: AI=15, Cal=70, Trello=50, Prices=85 -> Final=36
+[SMART_LOGIC] Component Scores:
+  - AI Analysis: 15%
+  - Calendar: 70%
+  - Trello: 50%
+  - Price List: 85%
+[SMART_LOGIC] Final Score: 36%
+[SMART_LOGIC] Needs Manual Review: True
+[SMART_LOGIC] Result:
+  - Base Confidence: 15%
+  - Final Confidence: 36%
+  - Needs Manual Review: True
+  - Data Sources: {'ai': 15, 'calendar': 70, 'trello': 50, 'price_list': 85}
+
+[ACTION] Decision Logic:
+  - Final Confidence: 36%
+  - Auto-reply Threshold: 85%
+  - Working Hours: True
+  - Needs Manual Review: True
+  - Has Unreadable Files: False
+  - Draft Bot Available: False
+
+[PATH: NO ACTION]
+  - Needs manual review: True
+  - Draft bot available: False
+  - Final confidence: 36%
+  - No action taken for this message
+[ACTION] REASON: Draft bot NOT AVAILABLE - cannot send draft for manual review
+[ACTION] STATUS: Message queued for retry when bot is ready
+[GOOGLE CALENDAR] Creating reminder for: User Info Х Get ID Х idbot
+[GOOGLE CALENDAR] Event created: mbk34bc2ndloumferkbnuekap4 - [15%] Report Review: User Info Х Get ID Х idbot
+[CALENDAR] —творено нагадуванн€: User Info Х Get ID Х idbot
+
+================================================================================
+RESULT: ”сп≥шно оброблено чат≥в: 6
+================================================================================

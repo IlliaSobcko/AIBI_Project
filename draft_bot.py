@@ -85,7 +85,7 @@ class DraftReviewBot:
             return
 
         startup_message = f"""
-🤖 **SYSTEM RESTARTED**
+[BOT] **SYSTEM RESTARTED**
 
 [OK] Bot is now ONLINE and ready to receive commands
 
@@ -100,7 +100,7 @@ Available Commands:
   • /report → Analytics dashboard
   • Звіт → Excel report export
 
-━━━━━━━━━━━━━━━━━━━━
+--------------------
 System is ready to process drafts and commands.
 """
 
@@ -111,9 +111,9 @@ System is ready to process drafts and commands.
             )
 
             if success:
-                print(f"[DRAFT BOT] ✓ Startup notification sent to owner ({self.owner_id})")
+                print(f"[DRAFT BOT] [OK] Startup notification sent to owner ({self.owner_id})")
             else:
-                print(f"[DRAFT BOT] ✗ Failed to send startup notification")
+                print(f"[DRAFT BOT] [ERROR] Failed to send startup notification")
 
         except Exception as e:
             print(f"[ERROR] Error sending startup notification: {e}")
@@ -158,7 +158,7 @@ System is ready to process drafts and commands.
                 # Forward message notification to owner for awareness
                 if self.owner_id and event.sender_id != self.owner_id:
                     try:
-                        notification = f"📨 New message from {sender_name}:\n\n{message_text[:200]}"
+                        notification = f"[MSG] New message from {sender_name}:\n\n{message_text[:200]}"
                         if len(message_text) > 200:
                             notification += "..."
 
@@ -608,7 +608,7 @@ Note: Automatic backup will be created before changes.
         print(f"[DRAFT SEND] TelegramService client connected: {self.tg_service.client is not None if self.tg_service else False}")
 
         # Format the draft message
-        message = f"""🤖 **NEW DRAFT FOR REVIEW**
+        message = f"""[BOT] **NEW DRAFT FOR REVIEW**
 
 **Chat**: {chat_title}
 **AI Confidence**: {confidence}%
@@ -617,7 +617,7 @@ Note: Automatic backup will be created before changes.
 **PROPOSED RESPONSE:**
 {draft_text}
 
-━━━━━━━━━━━━━━━━━━━━
+--------------------
 **Choose action:**
 """
 
@@ -860,7 +860,7 @@ Note: Automatic backup will be created before changes.
 [OK] High Confidence (≥80%): {high_confidence_count}
 📝 Drafts/Replies: {drafted_count}
 
-━━━━━━━━━━━━━━━━━━━━
+--------------------
 Report generation completed at {__import__('datetime').datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
 """
         print(f"[DRAFT BOT] [REPORT] Analytics complete")
