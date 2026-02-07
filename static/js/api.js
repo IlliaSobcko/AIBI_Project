@@ -19,24 +19,38 @@ class APIClient {
             }
 
             const response = await fetch(`${this.baseURL}${endpoint}`, options);
-            const data = await response.json();
+
+            // Check if response is actually JSON
+            const contentType = response.headers.get('content-type');
+            let data;
+
+            if (contentType && contentType.includes('application/json')) {
+                data = await response.json();
+            } else {
+                // If not JSON, read as text
+                const text = await response.text();
+                if (!response.ok) {
+                    throw new Error(`Server error: ${response.status} - ${text.substring(0, 200)}`);
+                }
+                data = { success: true, data: text };
+            }
 
             if (!response.ok) {
-                throw new Error(data.error || 'API request failed');
+                throw new Error(data.error || `API error: ${response.status}`);
             }
 
             return data;
         } catch (error) {
             console.error(`API Error [${method} ${endpoint}]:`, error);
-            throw error;
+            throw new Error(error.message || 'API request failed');
         }
     }
 
     // Chat operations
     async getChats(hours = 24, startDate = null, endDate = null) {
-        let url = '/chats?hours=' + hours;
-        if (startDate) url += '&start_date=' + startDate;
-        if (endDate) url += '&end_date=' + endDate;
+        let url = '/chats?hours=' + (hours || 24);
+        if (startDate) url += '&start_date=' + encodeURIComponent(startDate);
+        if (endDate) url += '&end_date=' + encodeURIComponent(endDate);
         return this.request('GET', url);
     }
 
@@ -61,10 +75,21 @@ class APIClient {
         return this.request('GET', '/analytics_report');
     }
 
+    async getGeneralStats() {
+        return this.request('GET', '/general_stats');
+    }
+
     async downloadAnalytics() {
-        const response = await fetch(`${this.baseURL}/analytics_download`);
-        if (!response.ok) throw new Error('Failed to download analytics');
-        return response;
+        try {
+            const response = await fetch(`${this.baseURL}/analytics_download`);
+            if (!response.ok) {
+                throw new Error('Failed to download analytics');
+            }
+            return response;
+        } catch (error) {
+            console.error('API Error [GET /analytics_download]:', error);
+            throw error;
+        }
     }
 
     async getKnowledgeBase(fileType) {

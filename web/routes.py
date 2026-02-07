@@ -535,3 +535,89 @@ def api_knowledge_base():
         import traceback
         traceback.print_exc()
         return jsonify({"error": str(e)}), 500
+
+
+@api_bp.route('/general_stats', methods=['GET'])
+def api_general_stats():
+    """
+    GET /api/general_stats
+
+    Get general analytics stats from all reports
+
+    Returns:
+        {
+            "total_reports": 5,
+            "win_count": 3,
+            "loss_count": 1,
+            "unknown_count": 1,
+            "total_revenue": 15000.00,
+            "average_confidence": 85,
+            "last_updated": "2026-02-07T12:00:00"
+        }
+    """
+    try:
+        from features.analytics_engine import UnifiedReportAnalyzer
+        from pathlib import Path
+        import re
+
+        analyzer = UnifiedReportAnalyzer(reports_folder='reports')
+
+        # Get all reports and analyze them
+        report_files = list(Path('reports').glob('*.txt')) if Path('reports').exists() else []
+
+        stats = {
+            "total_reports": len(report_files),
+            "win_count": 0,
+            "loss_count": 0,
+            "unknown_count": 0,
+            "total_revenue": 0.0,
+            "average_confidence": 0,
+            "last_updated": datetime.now(timezone.utc).isoformat()
+        }
+
+        confidence_scores = []
+
+        for report_file in report_files:
+            try:
+                text = report_file.read_text(encoding='utf-8')
+
+                # Extract deal status
+                status = analyzer.extract_deal_status(text)
+                if status == "Win":
+                    stats["win_count"] += 1
+                elif status == "Loss":
+                    stats["loss_count"] += 1
+                else:
+                    stats["unknown_count"] += 1
+
+                # Extract revenue
+                revenue = analyzer.extract_revenue(text)
+                stats["total_revenue"] += revenue
+
+                # Extract confidence
+                confidence_match = re.search(r'ВПЕВНЕНІСТЬ ШІ:\s*(\d+)%', text)
+                if confidence_match:
+                    confidence_scores.append(int(confidence_match.group(1)))
+
+            except Exception as e:
+                print(f"[STATS] Error processing {report_file}: {e}")
+                continue
+
+        # Calculate average confidence
+        if confidence_scores:
+            stats["average_confidence"] = round(sum(confidence_scores) / len(confidence_scores))
+
+        return jsonify(stats), 200
+
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({
+            "total_reports": 0,
+            "win_count": 0,
+            "loss_count": 0,
+            "unknown_count": 0,
+            "total_revenue": 0.0,
+            "average_confidence": 0,
+            "error": str(e)
+        }), 200  # Return 200 even on error to avoid breaking the UI

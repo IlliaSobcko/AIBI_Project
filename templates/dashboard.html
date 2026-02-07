@@ -4,10 +4,41 @@
 
 {% block content %}
 <div class="dashboard">
-    <h1>Chat Inbox</h1>
-    <p class="subtitle">Select chats to analyze</p>
+    <!-- Header -->
+    <div>
+        <h1>Chat Inbox Dashboard</h1>
+        <p class="subtitle">AI-Powered Chat Analysis & Management</p>
+    </div>
 
-    <!-- Date Range Filter -->
+    <!-- General Stats Card -->
+    <div class="stats-card" id="stats-card">
+        <div class="stat-item">
+            <div class="stat-value" id="stat-total">0</div>
+            <div class="stat-label">Total Reports</div>
+        </div>
+        <div class="stat-item">
+            <div class="stat-value" id="stat-wins">0</div>
+            <div class="stat-label">Wins</div>
+        </div>
+        <div class="stat-item">
+            <div class="stat-value" id="stat-losses">0</div>
+            <div class="stat-label">Losses</div>
+        </div>
+        <div class="stat-item">
+            <div class="stat-value" id="stat-pending">0</div>
+            <div class="stat-label">Pending</div>
+        </div>
+        <div class="stat-item">
+            <div class="stat-value" id="stat-revenue">$0</div>
+            <div class="stat-label">Total Revenue</div>
+        </div>
+        <div class="stat-item">
+            <div class="stat-value" id="stat-confidence">0%</div>
+            <div class="stat-label">Avg Confidence</div>
+        </div>
+    </div>
+
+    <!-- Filter Section -->
     <div class="filter-section">
         <h3>Filter by Date</h3>
         <div class="filter-controls">
@@ -24,37 +55,38 @@
                 <input type="datetime-local" id="end-date" placeholder="End">
             </div>
 
-            <button class="btn btn-primary" onclick="app.loadChats()">Apply Filter</button>
-            <button class="btn btn-secondary" onclick="app.loadChats()" title="Reload chat list">Refresh</button>
+            <button class="btn btn-primary" id="apply-btn" onclick="app.loadChats()">
+                <span>Apply Filter</span>
+            </button>
+            <button class="btn btn-secondary" id="refresh-btn" onclick="app.loadChats()" title="Reload chat list">
+                <span>Refresh</span>
+            </button>
             <span id="filter-info" class="filter-info"></span>
         </div>
     </div>
 
     <!-- Loading Indicator -->
-    <div id="loading" class="loading" style="display: none;">
+    <div id="loading" class="loading">
         <div class="spinner"></div>
-        <p>Loading chats...</p>
+        <p>Loading...</p>
     </div>
 
-    <!-- Chat List -->
-    <div class="chat-list" id="chat-list">
-        <p class="empty-state">No chats loaded. Click "Apply Filter" to fetch chats.</p>
-    </div>
+    <!-- Main Content Grid: Chat List (Left) + Analysis Panel (Right) -->
+    <div class="content-grid">
+        <!-- Left Panel: Chat List -->
+        <div class="chat-panel">
+            <div class="chat-panel-header">📱 Available Chats</div>
+            <div class="chat-list" id="chat-list">
+                <p class="empty-state">No chats loaded. Click "Apply Filter" to fetch chats.</p>
+            </div>
+        </div>
 
-    <!-- Analysis Result Panel -->
-    <div class="analysis-panel" id="analysis-panel" style="display: none;">
-        <h2>Analysis Result</h2>
-        <div class="analysis-header">
-            <h3 id="analysis-title"></h3>
-            <button class="btn btn-close" onclick="app.closeAnalysis()">X</button>
-        </div>
-        <div class="analysis-meta">
-            <span id="analysis-confidence"></span>
-            <span id="analysis-date"></span>
-        </div>
-        <div class="analysis-content" id="analysis-content"></div>
-        <div class="analysis-footer">
-            <button class="btn btn-secondary" onclick="app.closeAnalysis()">Close</button>
+        <!-- Right Panel: Analysis -->
+        <div class="analysis-panel" id="analysis-panel">
+            <h2>Analysis</h2>
+            <div id="analysis-content" class="analysis-empty">
+                <p>Select a chat and click "Analyze" to view results here</p>
+            </div>
         </div>
     </div>
 
@@ -63,7 +95,7 @@
         <div class="modal-content">
             <div class="modal-header">
                 <h2>Knowledge Base Manager</h2>
-                <button class="btn btn-close" onclick="app.closeKnowledgeModal()">X</button>
+                <button class="btn btn-close" onclick="app.closeKnowledgeModal()">×</button>
             </div>
             <div class="modal-body">
                 <label>File Type:</label>
@@ -76,30 +108,12 @@
             </div>
             <div class="modal-footer">
                 <button class="btn btn-secondary" onclick="app.closeKnowledgeModal()">Cancel</button>
-                <button class="btn btn-primary" onclick="app.saveKnowledgeBase()">Save</button>
+                <button class="btn btn-primary" id="kb-save-btn" onclick="app.saveKnowledgeBase()">
+                    <span>Save</span>
+                </button>
             </div>
         </div>
     </div>
-
-    <!-- Add Knowledge Base Button to Filter Section -->
-    <script>
-        document.addEventListener('DOMContentLoaded', function() {
-            const filterSection = document.querySelector('.filter-controls');
-            if (filterSection) {
-                const kb_btn = document.createElement('button');
-                kb_btn.className = 'btn btn-secondary';
-                kb_btn.textContent = 'Knowledge Base';
-                kb_btn.onclick = function() {
-                    const modal = document.getElementById('knowledge-modal');
-                    if (modal) {
-                        modal.classList.add('active');
-                        app.loadKnowledgeBase('prices');
-                    }
-                };
-                filterSection.appendChild(kb_btn);
-            }
-        });
-    </script>
 </div>
 
 <script src="{{ url_for('web.static', filename='js/app.js') }}"></script>
@@ -107,6 +121,12 @@
     // Initialize app on page load
     window.addEventListener('DOMContentLoaded', function() {
         app.init();
+        // Load general stats on page load
+        app.loadGeneralStats();
+        // Load chats on page load
+        app.loadChats();
+        // Add knowledge base button to filter section
+        app.addKnowledgeBaseButton();
     });
 </script>
 {% endblock %}
