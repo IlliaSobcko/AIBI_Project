@@ -40,6 +40,7 @@ class DraftReviewBot:
             session_name="draft_bot_service"
         )
         self.waiting_for_edit = {}  # {chat_id: True} - waiting for edit
+        self.waiting_for_instructions = False  # NEW: Track instruction update state
         self.connection_attempts = 0
         self.max_connection_attempts = 3
 
@@ -188,6 +189,255 @@ System is ready to process drafts and commands.
                             print(f"[ERROR] {error_msg}")
                             print(f"[ERROR] Full traceback:\n{traceback.format_exc()}")
                             await event.reply(error_msg)
+
+                    # ================================================================
+                    # COMMAND: /analytics - Unified analytics (Format A + B reports)
+                    # ================================================================
+                    elif message_text_lower == "/analytics":
+                        print(f"[DRAFT BOT] /analytics command received from owner")
+                        await event.reply("[LOAD] Running unified analytics (Format A + B reports)...")
+
+                        try:
+                            from features.analytics_engine import run_unified_analytics
+
+                            # Run analytics
+                            result = await run_unified_analytics(
+                                reports_folder='reports',
+                                output_file='unified_analytics.xlsx'
+                            )
+
+                            if result["success"]:
+                                summary = result["summary"]
+
+                                # Build formatted response
+                                response = f"""[OK] UNIFIED ANALYTICS COMPLETE
+
+[DEALS]
+  Total: {summary['total_deals']}
+  Wins: {summary['total_wins']} ({summary['win_rate']:.1f}%)
+  Losses: {summary['total_losses']}
+  Unknown: {summary['total_unknown']}
+
+[REVENUE]
+  Total: ${summary['total_revenue']:,.2f}
+  Avg/Win: ${summary['avg_win_revenue']:,.2f}
+
+[CUSTOMERS]
+  Unique: {summary['customer_count']}
+
+[FORMAT BREAKDOWN]
+  Format A Wins: {summary['format_breakdown']['format_a_wins']}
+  Format A Losses: {summary['format_breakdown']['format_a_losses']}
+  Format B Wins: {summary['format_breakdown']['format_b_wins']}
+  Format B Losses: {summary['format_breakdown']['format_b_losses']}
+
+[TOP WINNING FAQs]"""
+
+                                # Add top FAQs
+                                if summary['top_winning_faqs']:
+                                    for i, (faq, count) in enumerate(summary['top_winning_faqs'][:5], 1):
+                                        response += f"\n  {i}. {faq} ({count}x)"
+                                else:
+                                    response += "\n  [No FAQs found in winning deals]"
+
+                                response += f"\n\n[FILE]\n  Report: {result['file_path']}"
+
+                                await event.reply(response)
+                                print(f"[DRAFT BOT] [ANALYTICS] Complete - saved to {result['file_path']}")
+                            else:
+                                error_msg = f"[ERROR] Analytics failed: {result['message']}"
+                                print(f"[DRAFT BOT] {error_msg}")
+                                await event.reply(error_msg)
+
+                        except Exception as e:
+                            error_msg = f"[ERROR] {type(e).__name__}: {str(e)}"
+                            print(f"[DRAFT BOT] {error_msg}")
+                            print(f"[ERROR] Full traceback:\n{traceback.format_exc()}")
+                            await event.reply(error_msg)
+
+                    # ================================================================
+                    # COMMAND: /view_instructions - View current instructions
+                    # ================================================================
+                    elif message_text_lower == "/view_instructions":
+                        print(f"[DRAFT BOT] /view_instructions command received from owner")
+                        try:
+                            from features.dynamic_instructions import get_instructions_manager
+                            manager = get_instructions_manager()
+
+                            current = manager.get_current_instructions()
+                            dynamic = manager.get_dynamic_instructions()
+                            stats = manager.get_stats()
+
+                            # Build response
+                            core_preview = current[:400] + "..." if len(current) > 400 else current
+                            dynamic_preview = dynamic[:300] + "..." if len(dynamic) > 300 else dynamic
+
+                            response = f"""📋 **CURRENT INSTRUCTIONS**
+
+**Core Instructions** ({stats['instructions_size']} chars):
+{core_preview}
+
+**Dynamic Rules** ({stats['dynamic_size']} chars):
+{dynamic_preview}
+
+**Backups Available**: {stats['backup_count']}
+
+Available Commands:
+  /update_instructions - Edit instructions
+  /list_backups - Show available backups
+  /rollback_backup - Restore from backup
+"""
+                            await event.reply(response)
+                        except Exception as e:
+                            error_msg = f"❌ Error: {type(e).__name__}: {str(e)}"
+                            print(f"[ERROR] {error_msg}")
+                            await event.reply(error_msg)
+
+                    # ================================================================
+                    # COMMAND: /update_instructions - Start instruction update flow
+                    # ================================================================
+                    elif message_text_lower.startswith("/update_instructions"):
+                        print(f"[DRAFT BOT] /update_instructions command received from owner")
+                        self.waiting_for_instructions = True
+
+                        help_text = """📝 **INSTRUCTIONS UPDATE MODE**
+
+Send your update in format:
+  REPLACE: [new instructions text]
+  APPEND: [text to add at end]
+  PREPEND: [text to add at beginning]
+  DYNAMIC: [new dynamic rule to add]
+  CANCEL: Cancel this operation
+
+Examples:
+  APPEND: Always mention 24/7 customer support availability
+  DYNAMIC: New rule: Check current system status before responding
+  REPLACE: [Full new instructions text here...]
+
+Note: Automatic backup will be created before changes.
+"""
+                        await event.reply(help_text)
+
+                    # ================================================================
+                    # COMMAND: /list_backups - List available backups
+                    # ================================================================
+                    elif message_text_lower == "/list_backups":
+                        print(f"[DRAFT BOT] /list_backups command received from owner")
+                        try:
+                            from features.dynamic_instructions import get_instructions_manager
+                            manager = get_instructions_manager()
+
+                            backups = manager.list_backups(limit=10)
+
+                            if not backups:
+                                await event.reply("❌ No backups available yet")
+                                return
+
+                            response = "📦 **AVAILABLE BACKUPS** (Most recent first)\n\n"
+                            for i, backup in enumerate(backups, 1):
+                                response += f"{i}. {backup}\n"
+
+                            response += "\nUse: /rollback_backup [filename]\nExample: /rollback_backup instructions_backup_20240215_120000.txt"
+                            await event.reply(response)
+                        except Exception as e:
+                            error_msg = f"❌ Error: {type(e).__name__}: {str(e)}"
+                            print(f"[ERROR] {error_msg}")
+                            await event.reply(error_msg)
+
+                    # ================================================================
+                    # COMMAND: /rollback_backup - Restore from specific backup
+                    # ================================================================
+                    elif message_text_lower.startswith("/rollback_backup"):
+                        print(f"[DRAFT BOT] /rollback_backup command received from owner")
+                        try:
+                            from features.dynamic_instructions import get_instructions_manager
+
+                            # Parse backup filename from command
+                            parts = message_text.split(maxsplit=1)
+                            if len(parts) < 2:
+                                await event.reply("Usage: /rollback_backup [filename]\nExample: /rollback_backup instructions_backup_20240215_120000.txt")
+                                return
+
+                            backup_filename = parts[1].strip()
+                            manager = get_instructions_manager()
+
+                            result = await manager.rollback_to_backup(backup_filename)
+                            await event.reply(
+                                f"{'[OK]' if result['success'] else '[ERROR]'} {result['message']}"
+                            )
+                        except Exception as e:
+                            error_msg = f"❌ Error: {type(e).__name__}: {str(e)}"
+                            print(f"[ERROR] {error_msg}")
+                            await event.reply(error_msg)
+
+                    # ================================================================
+                    # HANDLE: Instructions update processing
+                    # ================================================================
+                    elif self.waiting_for_instructions and message_text:
+                        print(f"[DRAFT BOT] Processing instruction update")
+                        try:
+                            from features.dynamic_instructions import get_instructions_manager
+                            manager = get_instructions_manager()
+
+                            text = message_text.strip()
+
+                            # Check for cancel
+                            if text.upper() == "CANCEL":
+                                self.waiting_for_instructions = False
+                                await event.reply("❌ Instruction update cancelled")
+                                return
+
+                            # Process based on mode
+                            result = None
+
+                            if text.startswith("REPLACE:"):
+                                new_content = text[8:].strip()
+                                if not new_content:
+                                    await event.reply("❌ REPLACE mode requires content after the colon")
+                                    return
+                                result = await manager.update_instructions(new_content, mode="replace")
+
+                            elif text.startswith("APPEND:"):
+                                new_content = text[7:].strip()
+                                if not new_content:
+                                    await event.reply("❌ APPEND mode requires content after the colon")
+                                    return
+                                result = await manager.update_instructions(new_content, mode="append")
+
+                            elif text.startswith("PREPEND:"):
+                                new_content = text[8:].strip()
+                                if not new_content:
+                                    await event.reply("❌ PREPEND mode requires content after the colon")
+                                    return
+                                result = await manager.update_instructions(new_content, mode="prepend")
+
+                            elif text.startswith("DYNAMIC:"):
+                                new_rule = text[8:].strip()
+                                if not new_rule:
+                                    await event.reply("❌ DYNAMIC mode requires content after the colon")
+                                    return
+                                result = await manager.update_dynamic_instructions(new_rule)
+
+                            else:
+                                await event.reply("❌ Invalid format. Use REPLACE:/APPEND:/PREPEND:/DYNAMIC:/CANCEL")
+                                return
+
+                            # Send result
+                            if result:
+                                await event.reply(
+                                    f"{'[OK]' if result['success'] else '[ERROR]'} {result['message']}"
+                                )
+
+                                if result.get('backup_path'):
+                                    await event.reply(f"📦 Backup created: {result['backup_path']}")
+
+                            self.waiting_for_instructions = False
+
+                        except Exception as e:
+                            error_msg = f"❌ Error: {type(e).__name__}: {str(e)}"
+                            print(f"[ERROR] {error_msg}")
+                            await event.reply(error_msg)
+                            self.waiting_for_instructions = False
 
                     # ================================================================
                     # HANDLE: Edit text replies

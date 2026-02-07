@@ -19,6 +19,7 @@ from auto_reply import AutoReplyGenerator, is_working_hours, draft_system
 from draft_bot import DraftReviewBot
 from web.session_manager import AnalysisCache, SessionManager
 from web.telegram_auth import WebTelegramAuth
+from features.smart_logic import SmartDecisionEngine, DataSourceManager
 
 load_dotenv()
 app = Flask(__name__)
@@ -201,6 +202,16 @@ async def run_core_logic():
             except Exception as e:
                 print(f"[WARNING] Google Calendar не підключено: {e}")
 
+        # === Task 1: Initialize Smart Decision Engine ===
+        try:
+            business_data = read_instructions("business_data.txt", default="")
+            dsm = DataSourceManager(calendar_client=calendar, trello_client=trello, business_data=business_data)
+            decision_engine = SmartDecisionEngine(data_source_manager=dsm)
+            print("[MAIN] Smart Logic Decision Engine initialized")
+        except Exception as e:
+            print(f"[WARNING] Smart Logic not available: {e}")
+            decision_engine = None
+
         # Ініціалізація авто-відповідача
         auto_reply_threshold = int(os.getenv("AUTO_REPLY_CONFIDENCE", "85"))
         reply_generator = AutoReplyGenerator(ai_key)
@@ -240,7 +251,30 @@ async def run_core_logic():
             print(f"[OK] Processed: {accumulated_h.chat_title}")
 
             # === ADVANCED AI FLOW: Auto-Reply or Draft Review ===
-            confidence = result['confidence']
+
+            # === Task 1: Use Smart Decision Engine for Confidence Evaluation ===
+            if decision_engine:
+                try:
+                    smart_result = await decision_engine.evaluate_confidence(
+                        base_confidence=result['confidence'],
+                        chat_context={
+                            "chat_title": accumulated_h.chat_title,
+                            "message_history": accumulated_h.text,
+                            "analysis_report": result['report']
+                        },
+                        has_unreadable_files=accumulated_h.has_unreadable_files
+                    )
+                    final_confidence = smart_result["final_confidence"]
+                    needs_manual_review = smart_result["needs_manual_review"]
+                    print(f"[SMART_LOGIC] '{accumulated_h.chat_title}': Base={result['confidence']}% -> Final={final_confidence}% (Sources: {smart_result['data_sources']})")
+                except Exception as e:
+                    print(f"[WARNING] Smart Logic evaluation failed: {e}. Using base confidence.")
+                    final_confidence = result['confidence']
+                    needs_manual_review = result['confidence'] < auto_reply_threshold
+            else:
+                # Fallback to simple confidence check
+                final_confidence = result['confidence']
+                needs_manual_review = result['confidence'] < auto_reply_threshold
 
             # ZERO CONFIDENCE RULE: If unreadable files detected, force draft review
             if accumulated_h.has_unreadable_files:
@@ -272,8 +306,8 @@ async def run_core_logic():
                     except Exception as e:
                         print(f"[ERROR] Error creating draft for unreadable files: {e}")
 
-            # If confidence > 85% and working hours and NO unreadable files - auto-reply
-            elif confidence > auto_reply_threshold and is_working_hours():
+            # If smart confidence >= 90% and working hours and NO unreadable files - auto-reply
+            elif final_confidence >= 90 and is_working_hours():
                 try:
                     reply_text, reply_confidence = await reply_generator.generate_reply(
                         chat_title=accumulated_h.chat_title,
@@ -298,8 +332,8 @@ async def run_core_logic():
                 except Exception as e:
                     print(f"[ERROR] Auto-reply error: {e}")
 
-            # If confidence < 85% - send draft for review
-            elif confidence < auto_reply_threshold and draft_bot:
+            # If smart decision recommends manual review - send draft for review
+            elif needs_manual_review and draft_bot:
                 try:
                     reply_text, reply_confidence = await reply_generator.generate_reply(
                         chat_title=accumulated_h.chat_title,

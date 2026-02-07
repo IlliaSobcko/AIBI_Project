@@ -408,3 +408,120 @@ def api_scheduler_status():
         import traceback
         traceback.print_exc()
         return jsonify({"error": str(e)}), 500
+
+
+# === NEW INTEGRATION ROUTES ===
+
+@api_bp.route('/send_reply', methods=['POST'])
+def api_send_reply():
+    """
+    POST /api/send_reply
+    Send reply via Telegram
+    """
+    try:
+        data = request.get_json()
+        if not data or 'chat_id' not in data or 'reply_text' not in data:
+            return jsonify({"error": "Missing chat_id or reply_text"}), 400
+
+        chat_id = int(data.get('chat_id'))
+        reply_text = data.get('reply_text', '')
+
+        if not reply_text.strip():
+            return jsonify({"error": "Reply text cannot be empty"}), 400
+
+        # Send via Telegram
+        async def send_msg():
+            from main import collector
+            if collector and collector.client:
+                await collector.client.send_message(chat_id, reply_text)
+                return {"success": True}
+            raise Exception("Telegram client unavailable")
+
+        result = run_async(send_msg())
+        print(f"[WEB] Reply sent to chat {chat_id}")
+        return jsonify(result), 200
+
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({"error": str(e)}), 500
+
+
+@api_bp.route('/analytics_download', methods=['GET'])
+def api_analytics_download():
+    """
+    GET /api/analytics_download
+    Download analytics Excel file
+    """
+    try:
+        from features.analytics_engine import run_unified_analytics
+        from flask import send_file
+        import os
+
+        result = run_async(run_unified_analytics(
+            reports_folder='reports',
+            output_file='unified_analytics.xlsx'
+        ))
+
+        if not result.get('success'):
+            return jsonify({"error": "Analytics failed"}), 500
+
+        file_path = result.get('file_path')
+        if not file_path or not os.path.exists(file_path):
+            return jsonify({"error": "File not found"}), 500
+
+        print(f"[WEB] Downloading: {file_path}")
+        return send_file(
+            file_path,
+            as_attachment=True,
+            download_name='unified_analytics.xlsx',
+            mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+        )
+
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({"error": str(e)}), 500
+
+
+@api_bp.route('/knowledge_base', methods=['GET', 'POST'])
+def api_knowledge_base():
+    """
+    GET/POST /api/knowledge_base
+    Manage knowledge base files
+    """
+    try:
+        from pathlib import Path
+
+        if request.method == 'GET':
+            file_type = request.args.get('type', 'prices')
+            file_path = Path('business_data.txt') if file_type == 'prices' else Path('instructions.txt')
+
+            if not file_path.exists():
+                return jsonify({"content": ""}), 200
+
+            content = file_path.read_text(encoding='utf-8')
+            print(f"[WEB] Retrieved {file_type}")
+            return jsonify({"type": file_type, "content": content}), 200
+
+        else:  # POST
+            data = request.get_json()
+            if not data or 'type' not in data or 'content' not in data:
+                return jsonify({"error": "Missing type or content"}), 400
+
+            file_type = data.get('type')
+            content = data.get('content', '')
+
+            file_path = Path('business_data.txt') if file_type == 'prices' else Path('instructions.txt')
+
+            if len(content.strip()) < 10:
+                return jsonify({"error": "Content too short"}), 400
+
+            file_path.write_text(content, encoding='utf-8')
+            print(f"[WEB] Updated {file_type}")
+            return jsonify({"success": True}), 200
+
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({"error": str(e)}), 500
