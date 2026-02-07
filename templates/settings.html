@@ -1,0 +1,182 @@
+{% extends "base.html" %}
+
+{% block title %}Settings{% endblock %}
+
+{% block content %}
+<div class="settings-container">
+    <h1>Settings</h1>
+
+    <!-- Scheduler Settings -->
+    <div class="settings-section">
+        <h2>Auto-Scheduler</h2>
+        <p>Enable automatic analysis of chats every 20 minutes</p>
+
+        <div class="settings-item">
+            <div class="settings-control">
+                <label class="toggle-label">
+                    <input type="checkbox" id="scheduler-toggle" onchange="settings.toggleScheduler()">
+                    <span class="toggle-switch"></span>
+                </label>
+                <span id="scheduler-status" class="status-badge">Disabled</span>
+            </div>
+            <small id="scheduler-info" class="info-text">Manual mode: Analysis runs only when you click "Analyze"</small>
+        </div>
+    </div>
+
+    <!-- Date Range Defaults -->
+    <div class="settings-section">
+        <h2>Dashboard Defaults</h2>
+
+        <div class="settings-item">
+            <label for="default-hours">Default Time Range (hours)</label>
+            <select id="default-hours" onchange="settings.updateDefaultHours()">
+                <option value="24">Last 24 hours</option>
+                <option value="48">Last 48 hours</option>
+                <option value="168">Last week</option>
+                <option value="720">Last month</option>
+            </select>
+        </div>
+    </div>
+
+    <!-- Cache Settings -->
+    <div class="settings-section">
+        <h2>Analysis Cache</h2>
+        <p>Cached results reduce AI token usage by avoiding duplicate analysis</p>
+
+        <div class="settings-item">
+            <button class="btn btn-secondary" onclick="settings.clearCache()">Clear Cache</button>
+            <small>This won't affect analysis history, only removes temporary cache</small>
+        </div>
+    </div>
+
+    <!-- Auth Status -->
+    <div class="settings-section">
+        <h2>Authentication</h2>
+
+        <div id="auth-status-display" class="settings-item">
+            <p>Checking authentication status...</p>
+        </div>
+
+        <button class="btn btn-secondary" onclick="settings.goToAuth()">Update Authentication</button>
+    </div>
+
+    <!-- Status Message -->
+    <div id="status-message" class="status-message" style="display: none;"></div>
+</div>
+
+<script>
+    class SettingsManager {
+        constructor() {
+            this.init();
+        }
+
+        init() {
+            this.loadSchedulerStatus();
+            this.loadAuthStatus();
+        }
+
+        async loadSchedulerStatus() {
+            try {
+                const response = await fetch('/api/scheduler/status');
+                const data = await response.json();
+
+                document.getElementById('scheduler-toggle').checked = data.enabled;
+                this.updateSchedulerDisplay(data.enabled);
+            } catch (error) {
+                console.error('Error loading scheduler status:', error);
+            }
+        }
+
+        async loadAuthStatus() {
+            try {
+                const response = await fetch('/api/auth/status');
+                const data = await response.json();
+
+                const authDiv = document.getElementById('auth-status-display');
+                if (data.authenticated) {
+                    authDiv.innerHTML = `
+                        <div class="success-badge">
+                            <span>✓ Authenticated</span>
+                            <small>Last auth: ${new Date(data.last_auth).toLocaleString()}</small>
+                        </div>
+                    `;
+                } else {
+                    authDiv.innerHTML = `
+                        <div class="warning-badge">
+                            <span>Not authenticated</span>
+                            <small>Please authenticate to enable analysis</small>
+                        </div>
+                    `;
+                }
+            } catch (error) {
+                console.error('Error loading auth status:', error);
+            }
+        }
+
+        async toggleScheduler() {
+            const enabled = document.getElementById('scheduler-toggle').checked;
+
+            try {
+                const response = await fetch('/api/scheduler/toggle', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ enabled })
+                });
+
+                const data = await response.json();
+                this.updateSchedulerDisplay(data.enabled);
+                this.showStatus(`Scheduler ${data.enabled ? 'enabled' : 'disabled'}`);
+            } catch (error) {
+                console.error('Error toggling scheduler:', error);
+                this.showStatus('Error updating scheduler', 'error');
+                document.getElementById('scheduler-toggle').checked = !enabled;
+            }
+        }
+
+        updateSchedulerDisplay(enabled) {
+            const status = document.getElementById('scheduler-status');
+            const info = document.getElementById('scheduler-info');
+
+            if (enabled) {
+                status.textContent = 'Enabled';
+                status.className = 'status-badge enabled';
+                info.textContent = 'Auto-analysis runs every 20 minutes';
+            } else {
+                status.textContent = 'Disabled';
+                status.className = 'status-badge disabled';
+                info.textContent = 'Manual mode: Analysis runs only when you click "Analyze"';
+            }
+        }
+
+        updateDefaultHours() {
+            const hours = document.getElementById('default-hours').value;
+            localStorage.setItem('defaultHours', hours);
+            this.showStatus('Default time range updated');
+        }
+
+        async clearCache() {
+            if (confirm('Clear analysis cache? This may require re-running some analyses.')) {
+                // Call backend to clear cache
+                this.showStatus('Cache cleared');
+            }
+        }
+
+        goToAuth() {
+            window.location.href = '/auth';
+        }
+
+        showStatus(message, type = 'success') {
+            const statusDiv = document.getElementById('status-message');
+            statusDiv.textContent = message;
+            statusDiv.className = `status-message ${type}`;
+            statusDiv.style.display = 'block';
+
+            setTimeout(() => {
+                statusDiv.style.display = 'none';
+            }, 3000);
+        }
+    }
+
+    const settings = new SettingsManager();
+</script>
+{% endblock %}

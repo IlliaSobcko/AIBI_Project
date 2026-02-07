@@ -1,0 +1,16 @@
+FutureLabs Inc
+Client Name: FutureLabs Inc
+Status: Win
+Deal Won: Yes
+
+Revenue: $87,300
+Amount: $87,300
+
+Key Success Factors:
+FAQ 1: What compliance standards do you support?
+FAQ 2: How does the platform integrate with our existing tools?
+FAQ 3: What are the system requirements for the platform?
+FAQ 5: How does the pricing scale with usage?
+
+The client was particularly concerned about compliance and integration with their existing Salesforce setup.
+Our strong compliance credentials and native Salesforce integration were major selling points.

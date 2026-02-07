@@ -1,0 +1,17 @@
+GlobalTrade Inc
+Company: GlobalTrade Inc
+Contact: John Smith
+Date: 2024-02-20
+
+Deal Status: Loss
+Status: Rejected
+
+Revenue: $0
+Deal Value: $0
+
+Summary:
+This deal did not move forward due to budget constraints on the client's side.
+
+Notes:
+The client was interested but couldn't justify the expense during their Q1 budget cycle.
+They indicated they might revisit in Q3.

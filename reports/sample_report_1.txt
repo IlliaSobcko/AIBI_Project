@@ -1,0 +1,23 @@
+TechCorp Solutions
+Client: TechCorp Solutions
+Company: TechCorp Solutions Inc.
+Date: 2024-02-15
+
+Deal Status: Win
+Status: Closed
+
+Revenue: $125,500
+Deal Value: $125,500
+
+Summary:
+This was a successful software licensing deal for our enterprise platform.
+
+FAQ References:
+FAQ 1: What are the system requirements for the platform?
+FAQ 2: How does the licensing model work?
+FAQ 3: What support options are included?
+FAQ 4: Can we customize the platform for our needs?
+
+Details:
+The client was impressed with the scalability and our 24/7 support offering.
+They appreciated the flexibility in the licensing model and our responsive support team.

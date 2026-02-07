@@ -1,0 +1,159 @@
+{% extends "base.html" %}
+
+{% block title %}Authentication{% endblock %}
+
+{% block content %}
+<div class="auth-container">
+    <div class="auth-card">
+        <h1>Telegram Authentication</h1>
+        <p>Sign in with your Telegram account to enable AI analysis</p>
+
+        <div id="auth-status" class="auth-status" style="display: none;"></div>
+
+        <!-- Step 1: Phone Number -->
+        <div id="step-phone" class="auth-step">
+            <h2>Step 1: Enter Phone Number</h2>
+            <div class="form-group">
+                <label for="phone">Phone Number</label>
+                <input type="tel" id="phone" placeholder="+1 (555) 123-4567" required>
+                <small>Include country code (e.g., +1 for USA)</small>
+            </div>
+            <button class="btn btn-primary" onclick="auth.sendCode()">Send Code</button>
+        </div>
+
+        <!-- Step 2: Verification Code -->
+        <div id="step-verify" class="auth-step" style="display: none;">
+            <h2>Step 2: Enter Verification Code</h2>
+            <p>Check your Telegram app for the verification code</p>
+            <div class="form-group">
+                <label for="code">Verification Code</label>
+                <input type="text" id="code" placeholder="12345" maxlength="6" required>
+            </div>
+            <div class="form-actions">
+                <button class="btn btn-primary" onclick="auth.verifyCode()">Verify Code</button>
+                <button class="btn btn-secondary" onclick="auth.restart()">Back</button>
+            </div>
+        </div>
+
+        <!-- Success -->
+        <div id="step-success" class="auth-step" style="display: none;">
+            <div class="success-message">
+                <h2>✓ Authentication Successful!</h2>
+                <p id="success-user"></p>
+                <a href="/" class="btn btn-primary">Go to Dashboard</a>
+            </div>
+        </div>
+
+        <!-- Error -->
+        <div id="error-message" class="error-message" style="display: none;"></div>
+    </div>
+</div>
+
+<script>
+    class AuthManager {
+        constructor() {
+            this.phone = null;
+            this.loading = false;
+        }
+
+        async sendCode() {
+            const phone = document.getElementById('phone').value;
+
+            if (!phone) {
+                this.showError('Please enter a phone number');
+                return;
+            }
+
+            this.phone = phone;
+            this.loading = true;
+            document.querySelector('#step-phone .btn').disabled = true;
+            document.querySelector('#step-phone .btn').textContent = 'Sending...';
+
+            try {
+                const response = await fetch('/api/auth/phone', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ phone })
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    this.showStep('verify');
+                } else {
+                    this.showError(data.message || 'Failed to send code');
+                }
+            } catch (error) {
+                this.showError('Network error: ' + error.message);
+            } finally {
+                this.loading = false;
+                document.querySelector('#step-phone .btn').disabled = false;
+                document.querySelector('#step-phone .btn').textContent = 'Send Code';
+            }
+        }
+
+        async verifyCode() {
+            const code = document.getElementById('code').value;
+
+            if (!code || code.length < 5) {
+                this.showError('Please enter a valid code');
+                return;
+            }
+
+            this.loading = true;
+            document.querySelector('#step-verify .btn-primary').disabled = true;
+            document.querySelector('#step-verify .btn-primary').textContent = 'Verifying...';
+
+            try {
+                const response = await fetch('/api/auth/verify', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        phone: this.phone,
+                        code
+                    })
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    document.getElementById('success-user').textContent = data.message;
+                    this.showStep('success');
+                } else {
+                    this.showError(data.message || 'Verification failed');
+                }
+            } catch (error) {
+                this.showError('Network error: ' + error.message);
+            } finally {
+                this.loading = false;
+                document.querySelector('#step-verify .btn-primary').disabled = false;
+                document.querySelector('#step-verify .btn-primary').textContent = 'Verify Code';
+            }
+        }
+
+        restart() {
+            this.phone = null;
+            document.getElementById('phone').value = '';
+            document.getElementById('code').value = '';
+            this.showStep('phone');
+        }
+
+        showStep(step) {
+            document.getElementById('step-phone').style.display = step === 'phone' ? 'block' : 'none';
+            document.getElementById('step-verify').style.display = step === 'verify' ? 'block' : 'none';
+            document.getElementById('step-success').style.display = step === 'success' ? 'block' : 'none';
+        }
+
+        showError(message) {
+            const errorDiv = document.getElementById('error-message');
+            errorDiv.textContent = message;
+            errorDiv.style.display = 'block';
+            setTimeout(() => {
+                errorDiv.style.display = 'none';
+            }, 5000);
+        }
+    }
+
+    const auth = new AuthManager();
+</script>
+{% endblock %}

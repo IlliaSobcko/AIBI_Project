@@ -1,0 +1,13 @@
+flask
+apscheduler
+python-dotenv
+telethon
+openai
+requests
+google-auth
+google-auth-oauthlib
+google-auth-httplib2
+google-api-python-client
+cryptography
+pandas
+openpyxl
