@@ -247,10 +247,37 @@ async def run_core_logic():
     analyzer = MultiAgentAnalyzer([agent])
 
     async with TelegramCollector(tg_cfg) as collector:
+        # Verify session is authenticated
+        print(f"\n[SESSION VERIFY] Checking Telegram session authentication...")
+        try:
+            me = await collector.client.get_me()
+            print(f"[SESSION VERIFY] ✅ Authenticated as: {me.first_name}")
+            print(f"[SESSION VERIFY] User ID: {me.id}")
+            print(f"[SESSION VERIFY] Is Bot: {me.is_bot}")
+            print(f"[SESSION VERIFY] Session Type: {'BOT' if me.is_bot else 'USERBOT'}")
+        except Exception as e:
+            print(f"[SESSION VERIFY] ❌ Failed to verify session: {e}")
+            print(f"[SESSION VERIFY] Messages may not send correctly")
+
+        # Wait for draft bot to initialize
+        print(f"\n[INIT CHECK] Waiting for draft bot initialization...")
+        max_wait = 50  # 5 seconds max
+        for i in range(max_wait):
+            if DRAFT_BOT is not None:
+                print(f"[INIT CHECK] ✅ Draft bot ready after {i*0.1:.1f}s")
+                break
+            await asyncio.sleep(0.1)
+        else:
+            print(f"[INIT CHECK] ⚠️  Draft bot still initializing (>5s), proceeding anyway")
+
+        print(f"\n[DIALOGS] Fetching chat list...")
         dialogs = await collector.list_dialogs(limit=15)
-        # Збираємо історію за останні 7 днів (або скільки вказано в .env)
+        print(f"[DIALOGS] Found {len(dialogs)} chats")
+        # Збираємо історію за останні 7 днів (або скільке вказано в .env)
         days = int(os.getenv("DAYS", 7))
+        print(f"[HISTORY] Collecting messages from last {days} days...")
         histories = await collector.collect_history_last_days(dialogs, days)
+        print(f"[HISTORY] Collected {len(histories)} messages")
 
         # Ініціалізація Trello та Google Calendar (опціонально)
         trello = None
@@ -275,12 +302,19 @@ async def run_core_logic():
 
         # === Task 1: Initialize Smart Decision Engine ===
         try:
-            business_data = read_instructions("business_data.txt", default="")
+            # Load business data (optional)
+            try:
+                business_data = read_instructions("business_data.txt")
+            except FileNotFoundError:
+                print("[SMART_LOGIC] business_data.txt not found, using empty string")
+                business_data = ""
+
             dsm = DataSourceManager(calendar_client=calendar, trello_client=trello, business_data=business_data)
             decision_engine = SmartDecisionEngine(data_source_manager=dsm)
-            print("[MAIN] Smart Logic Decision Engine initialized")
+            print("[MAIN] ✅ Smart Logic Decision Engine initialized successfully")
         except Exception as e:
-            print(f"[WARNING] Smart Logic not available: {e}")
+            print(f"[WARNING] Smart Logic initialization failed: {e}")
+            print(f"[DEBUG] Traceback:\n{traceback.format_exc()}")
             decision_engine = None
 
         # Ініціалізація авто-відповідача
