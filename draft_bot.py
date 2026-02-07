@@ -188,11 +188,31 @@ System is ready to process drafts and commands.
                     # ================================================================
                     if message_text_lower == "/check":
                         print(f"[DRAFT BOT] Manual /check command received from owner")
-                        await event.reply("🔍 Triggering manual analysis... This will take a moment...")
+                        print(f"[DRAFT BOT] Clearing any waiting states before analysis...")
+
+                        # Clear all waiting states to unblock any pending operations
+                        self.waiting_for_edit.clear()
+                        self.waiting_for_instructions = False
+                        print(f"[DRAFT BOT] Waiting states cleared: {len(self.waiting_for_edit)} items removed")
+
+                        await event.reply("[CHECK] Clearing states and triggering manual analysis of last 10 messages... This will take a moment...")
                         from main import run_core_logic
                         try:
+                            print(f"[DRAFT BOT] [CHECK] Starting run_core_logic() to reanalyze recent messages...")
                             result = await run_core_logic()
-                            await event.reply(f"[OK] Analysis complete: {result}")
+
+                            success_msg = f"""[OK] ANALYSIS COMPLETE
+
+[RESULT] {result}
+
+[NOTES]
+• All states cleared before analysis
+• Checked and processed recent messages
+• Drafts sent for any messages needing review
+• Check console for detailed debug output with [INPUT], [SMART_LOGIC], [ACTION] lines
+"""
+                            await event.reply(success_msg)
+                            print(f"[DRAFT BOT] [CHECK] Analysis complete - user notified")
                         except Exception as e:
                             error_msg = f"[ERROR] Analysis failed: {type(e).__name__}: {str(e)}"
                             print(f"[ERROR] {error_msg}")

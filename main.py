@@ -339,6 +339,12 @@ async def run_core_logic():
             print(f"[PROCESS START] Message length: {len(h.text)} chars")
             print(f"{'='*80}")
 
+            # === FORCED DEBUG OUTPUT ===
+            # Show what we're processing
+            message_preview = h.text[:150].replace('\n', ' ')
+            print(f"[INPUT] Message received: '{message_preview}...'")
+            print(f"[INPUT] Chat ID: {h.chat_id}, Sender: {h.sender}")
+
             # MESSAGE ACCUMULATION: Add to accumulator (7 second window)
             message_accumulator.add_message(h)
 
@@ -391,6 +397,21 @@ async def run_core_logic():
                     final_confidence = smart_result["final_confidence"]
                     needs_manual_review = smart_result["needs_manual_review"]
 
+                    # === FORCED DEBUG OUTPUT: Show Smart Logic Results ===
+                    data_sources = smart_result.get('data_sources', {})
+                    ai_score = data_sources.get('ai', result['confidence'])
+                    cal_score = data_sources.get('calendar', 0)
+                    trello_score = data_sources.get('trello', 0)
+                    price_score = data_sources.get('price_list', 0)
+
+                    print(f"[SMART_LOGIC] Component Scores:")
+                    print(f"  - AI Analysis: {ai_score}%")
+                    print(f"  - Calendar: {cal_score}%")
+                    print(f"  - Trello: {trello_score}%")
+                    print(f"  - Price List: {price_score}%")
+                    print(f"[SMART_LOGIC] Final Score: {final_confidence}%")
+                    print(f"[SMART_LOGIC] Needs Manual Review: {needs_manual_review}")
+
                     print(f"[SMART_LOGIC] Result:")
                     print(f"  - Base Confidence: {result['confidence']}%")
                     print(f"  - Final Confidence: {final_confidence}%")
@@ -410,10 +431,20 @@ async def run_core_logic():
                 print(f"  - Final Confidence: {final_confidence}%")
                 print(f"  - Needs Manual Review: {needs_manual_review}")
 
+            # === FORCED DEBUG OUTPUT: Action Decision ===
+            print(f"\n[ACTION] Decision Logic:")
+            print(f"  - Final Confidence: {final_confidence}%")
+            print(f"  - Auto-reply Threshold: {auto_reply_threshold}%")
+            print(f"  - Working Hours: {is_working_hours()}")
+            print(f"  - Needs Manual Review: {needs_manual_review}")
+            print(f"  - Has Unreadable Files: {accumulated_h.has_unreadable_files}")
+            print(f"  - Draft Bot Available: {draft_bot is not None}")
+
             # ZERO CONFIDENCE RULE: If unreadable files detected, force draft review
             if accumulated_h.has_unreadable_files:
                 print(f"\n[PATH: UNREADABLE FILES]")
                 print(f"  - Unreadable files detected in '{accumulated_h.chat_title}'. Forcing draft review...")
+                print(f"[ACTION] REASON: Unreadable files require manual review")
                 if draft_bot:
                     try:
                         print(f"[DRAFT GEN] Generating reply with unreadable_files=True...")
@@ -457,6 +488,7 @@ async def run_core_logic():
                 print(f"  - Working hours: YES")
                 print(f"  - Unreadable files: NO")
                 print(f"  - Proceeding with AUTO-REPLY...")
+                print(f"[ACTION] REASON: Confidence >= 90% and within working hours - auto-reply triggered")
 
                 try:
                     print(f"[REPLY GEN] Generating auto-reply text...")
@@ -536,6 +568,7 @@ async def run_core_logic():
                 print(f"  - Needs manual review: YES")
                 print(f"  - Draft bot available: YES")
                 print(f"  - Sending draft for owner review...")
+                print(f"[ACTION] REASON: Confidence {final_confidence}% < 90% threshold OR outside working hours - needs manual review")
 
                 try:
                     print(f"[DRAFT GEN] Generating draft reply...")
@@ -574,6 +607,15 @@ async def run_core_logic():
                 print(f"  - Draft bot available: {draft_bot is not None}")
                 print(f"  - Final confidence: {final_confidence}%")
                 print(f"  - No action taken for this message")
+
+                # === FORCED DEBUG OUTPUT: Explain why draft NOT created ===
+                if needs_manual_review and not draft_bot:
+                    print(f"[ACTION] REASON: Draft bot NOT AVAILABLE - cannot send draft for manual review")
+                    print(f"[ACTION] STATUS: Message queued for retry when bot is ready")
+                elif final_confidence < 90 and not needs_manual_review:
+                    print(f"[ACTION] REASON: Logic error - confidence {final_confidence}% but no manual review needed?")
+                else:
+                    print(f"[ACTION] REASON: Unknown - check decision logic")
 
             # Інтеграція з Trello (якщо критична впевненість)
             if trello and result['confidence'] >= 80:

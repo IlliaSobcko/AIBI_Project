@@ -1,0 +1,191 @@
+C:\Users\Illia\AppData\Local\Programs\Python\Python310\lib\site-packages\google\api_core\_python_version_support.py:266: FutureWarning: You are using a Python version (3.10.7) which Google will stop supporting in new releases of google.api_core once it reaches its end of life (2026-10-04). Please upgrade to the latest Python version, or at least Python 3.11, to continue receiving updates for google.api_core past that date.
+  warnings.warn(message, FutureWarning)
+Traceback (most recent call last):
+  File "D:\projects\AIBI_Project\trigger_test_analysis.py", line 39, in <module>
+    asyncio.run(main())
+  File "C:\Users\Illia\AppData\Local\Programs\Python\Python310\lib\asyncio\runners.py", line 44, in run
+    return loop.run_until_complete(main)
+  File "C:\Users\Illia\AppData\Local\Programs\Python\Python310\lib\asyncio\base_events.py", line 646, in run_until_complete
+    return future.result()
+  File "D:\projects\AIBI_Project\trigger_test_analysis.py", line 32, in main
+    result = await run_core_logic()
+  File "D:\projects\AIBI_Project\main.py", line 338, in run_core_logic
+    print(f"[PROCESS START] Chat: '{h.chat_title}' (ID: {h.chat_id})")
+  File "C:\Users\Illia\AppData\Local\Programs\Python\Python310\lib\encodings\cp1251.py", line 19, in encode
+    return codecs.charmap_encode(input,self.errors,encoding_table)[0]
+UnicodeEncodeError: 'charmap' codec can't encode characters in position 23-24: character maps to <undefined>
+[DEBUG] Flask app instance created: 2487832936704
+[SCHEDULER] Auto-analysis DISABLED (manual mode only)
+[DEBUG] register_blueprints() called
+[DEBUG] Imported blueprints. web_bp routes: 3, api_bp routes: 12
+[DEBUG] Blueprints registered successfully
+================================================================================
+MANUAL TEST TRIGGER - run_core_logic()
+================================================================================
+
+This will process all messages with VERBOSE debugging output.
+Watch the console for detailed logs showing:
+  - Which chats are being processed
+  - AI confidence scores
+  - Smart Logic decisions
+  - Draft generation
+  - Message sending attempts
+  - Telegram service status
+
+================================================================================
+
+[2026-02-07 13:43:51.248915] >>> Запуск циклу аналізу...
+
+[SESSION VERIFY] Checking Telegram session authentication...
+[SESSION VERIFY] [OK] Authenticated as: UFO
+[SESSION VERIFY] User ID: 8040716622
+[SESSION VERIFY] [ERROR] Failed to verify session: 'User' object has no attribute 'is_bot'
+[SESSION VERIFY] Messages may not send correctly
+
+[INIT CHECK] Waiting for draft bot initialization...
+[INIT CHECK] [WARN]  Draft bot still initializing (>5s), proceeding anyway
+
+[DIALOGS] Fetching chat list...
+[DIALOGS] Found 9 chats
+[HISTORY] Collecting messages from last 7 days...
+[HISTORY] Collected 7 messages
+[GOOGLE CALENDAR] Successfully authenticated using Service Account
+[GOOGLE CALENDAR] Project: my-project-aibi-485600
+[GOOGLE CALENDAR] Service Account Email: calendar-bot@my-project-aibi-485600.iam.gserviceaccount.com
+[SMART_LOGIC] DataSourceManager initialized
+  Calendar available: True
+  Trello available: True
+  Business data: 2792 chars
+[SMART_LOGIC] DecisionEngine initialized
+  Confidence threshold: 90%
+  Weights: AI=0.6, Cal=0.2, Trello=0.1, Prices=0.1
+[MAIN] [OK] Smart Logic Decision Engine initialized successfully
+[WARNING] Draft bot not available - drafts will NOT be sent
+
+================================================================================
+[PROCESS START] Chat: 'Send_Message_telegram' (ID: 8244511048)
+[PROCESS START] Message length: 643 chars
+================================================================================
+[AI ANALYSIS] Starting analysis for 'Send_Message_telegram'...
+[AI_CLIENT] [PARSE] Extracted confidence: 98% from AI response
+[AI ANALYSIS] Completed. Confidence: 98%
+[OK] Processed: Send_Message_telegram
+[DECISION] Starting decision engine evaluation...
+  - AI Confidence: 98%
+  - Auto-reply threshold: 85%
+  - Working hours: True
+  - Has unreadable files: False
+[DECISION] Evaluating with Smart Logic...
+  - Trello available: True
+  - Calendar available: True
+[SMART_LOGIC] Evaluation: AI=98, Cal=70, Trello=50, Prices=50 -> Final=82
+[SMART_LOGIC] Result:
+  - Base Confidence: 98%
+  - Final Confidence: 82%
+  - Needs Manual Review: True
+  - Data Sources: {'ai': 98, 'calendar': 70, 'trello': 50, 'price_list': 50}
+
+[PATH: NO ACTION]
+  - Needs manual review: True
+  - Draft bot available: False
+  - Final confidence: 82%
+  - No action taken for this message
+[TRELLO] Створено картку: Send_Message_telegram
+
+================================================================================
+[PROCESS START] Chat: 'AIBI_Secretary_Bot' (ID: 8559587930)
+[PROCESS START] Message length: 31491 chars
+================================================================================
+[AI ANALYSIS] Starting analysis for 'AIBI_Secretary_Bot'...
+[AI_CLIENT] [PARSE] Extracted confidence: 92% from AI response
+[AI ANALYSIS] Completed. Confidence: 92%
+[OK] Processed: AIBI_Secretary_Bot
+[DECISION] Starting decision engine evaluation...
+  - AI Confidence: 92%
+  - Auto-reply threshold: 85%
+  - Working hours: True
+  - Has unreadable files: False
+[DECISION] Evaluating with Smart Logic...
+  - Trello available: True
+  - Calendar available: True
+[SMART_LOGIC] Evaluation: AI=92, Cal=70, Trello=50, Prices=85 -> Final=82
+[SMART_LOGIC] Result:
+  - Base Confidence: 92%
+  - Final Confidence: 82%
+  - Needs Manual Review: True
+  - Data Sources: {'ai': 92, 'calendar': 70, 'trello': 50, 'price_list': 85}
+
+[PATH: NO ACTION]
+  - Needs manual review: True
+  - Draft bot available: False
+  - Final confidence: 82%
+  - No action taken for this message
+[TRELLO] Створено картку: AIBI_Secretary_Bot
+[GOOGLE CALENDAR] Creating reminder for: AIBI_Secretary_Bot
+[GOOGLE CALENDAR] Event created: qe89tintlpmsjg8ivj82o4bksg - [92%] Report Review: AIBI_Secretary_Bot
+[CALENDAR] Створено нагадування: AIBI_Secretary_Bot
+
+================================================================================
+[PROCESS START] Chat: 'Ілля' (ID: 526791303)
+[PROCESS START] Message length: 659 chars
+================================================================================
+[AI ANALYSIS] Starting analysis for 'Ілля'...
+[AI_CLIENT] [PARSE] Extracted confidence: 98% from AI response
+[AI ANALYSIS] Completed. Confidence: 98%
+[OK] Processed: Ілля
+[DECISION] Starting decision engine evaluation...
+  - AI Confidence: 98%
+  - Auto-reply threshold: 85%
+  - Working hours: True
+  - Has unreadable files: False
+[DECISION] Evaluating with Smart Logic...
+  - Trello available: True
+  - Calendar available: True
+[SMART_LOGIC] Evaluation: AI=98, Cal=70, Trello=50, Prices=50 -> Final=82
+[SMART_LOGIC] Result:
+  - Base Confidence: 98%
+  - Final Confidence: 82%
+  - Needs Manual Review: True
+  - Data Sources: {'ai': 98, 'calendar': 70, 'trello': 50, 'price_list': 50}
+
+[PATH: NO ACTION]
+  - Needs manual review: True
+  - Draft bot available: False
+  - Final confidence: 82%
+  - No action taken for this message
+[TRELLO] Створено картку: Ілля
+
+================================================================================
+[PROCESS START] Chat: 'Telegram' (ID: 777000)
+[PROCESS START] Message length: 961 chars
+================================================================================
+[AI ANALYSIS] Starting analysis for 'Telegram'...
+[AI_CLIENT] [PARSE] Extracted confidence: 100% from AI response
+[AI ANALYSIS] Completed. Confidence: 100%
+[OK] Processed: Telegram
+[DECISION] Starting decision engine evaluation...
+  - AI Confidence: 100%
+  - Auto-reply threshold: 85%
+  - Working hours: True
+  - Has unreadable files: False
+[DECISION] Evaluating with Smart Logic...
+  - Trello available: True
+  - Calendar available: True
+[SMART_LOGIC] Evaluation: AI=100, Cal=70, Trello=50, Prices=50 -> Final=84
+[SMART_LOGIC] Result:
+  - Base Confidence: 100%
+  - Final Confidence: 84%
+  - Needs Manual Review: True
+  - Data Sources: {'ai': 100, 'calendar': 70, 'trello': 50, 'price_list': 50}
+
+[PATH: NO ACTION]
+  - Needs manual review: True
+  - Draft bot available: False
+  - Final confidence: 84%
+  - No action taken for this message
+[TRELLO] Створено картку: Telegram
+
+================================================================================
+
+
+ERROR: 'charmap' codec can't encode characters in position 23-24: character maps to <undefined>
