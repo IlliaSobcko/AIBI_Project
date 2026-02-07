@@ -296,7 +296,14 @@ async def run_core_logic():
 
         count = 0
         for h in histories:
-            if not h.text.strip(): continue
+            if not h.text.strip():
+                print(f"[SKIP] Chat '{h.chat_title}' has empty text")
+                continue
+
+            print(f"\n{'='*80}")
+            print(f"[PROCESS START] Chat: '{h.chat_title}' (ID: {h.chat_id})")
+            print(f"[PROCESS START] Message length: {len(h.text)} chars")
+            print(f"{'='*80}")
 
             # MESSAGE ACCUMULATION: Add to accumulator (7 second window)
             message_accumulator.add_message(h)
@@ -308,7 +315,9 @@ async def run_core_logic():
                 accumulated_h = h
 
             # Аналіз через "Консиліум"
+            print(f"[AI ANALYSIS] Starting analysis for '{h.chat_title}'...")
             result = await analyzer.analyze_chat(instructions, accumulated_h)
+            print(f"[AI ANALYSIS] Completed. Confidence: {result['confidence']}%")
 
             # Збереження результату
             file_name = f"reports/{sanitize_filename(accumulated_h.chat_title)}.txt"
@@ -324,8 +333,18 @@ async def run_core_logic():
             # === ADVANCED AI FLOW: Auto-Reply or Draft Review ===
 
             # === Task 1: Use Smart Decision Engine for Confidence Evaluation ===
+            print(f"[DECISION] Starting decision engine evaluation...")
+            print(f"  - AI Confidence: {result['confidence']}%")
+            print(f"  - Auto-reply threshold: {auto_reply_threshold}%")
+            print(f"  - Working hours: {is_working_hours()}")
+            print(f"  - Has unreadable files: {accumulated_h.has_unreadable_files}")
+
             if decision_engine:
                 try:
+                    print(f"[DECISION] Evaluating with Smart Logic...")
+                    print(f"  - Trello available: {trello is not None}")
+                    print(f"  - Calendar available: {calendar is not None}")
+
                     smart_result = await decision_engine.evaluate_confidence(
                         base_confidence=result['confidence'],
                         chat_context={
@@ -337,35 +356,50 @@ async def run_core_logic():
                     )
                     final_confidence = smart_result["final_confidence"]
                     needs_manual_review = smart_result["needs_manual_review"]
-                    print(f"[SMART_LOGIC] '{accumulated_h.chat_title}': Base={result['confidence']}% -> Final={final_confidence}% (Sources: {smart_result['data_sources']})")
+
+                    print(f"[SMART_LOGIC] Result:")
+                    print(f"  - Base Confidence: {result['confidence']}%")
+                    print(f"  - Final Confidence: {final_confidence}%")
+                    print(f"  - Needs Manual Review: {needs_manual_review}")
+                    print(f"  - Data Sources: {smart_result.get('data_sources', 'N/A')}")
+
                 except Exception as e:
                     print(f"[WARNING] Smart Logic evaluation failed: {e}. Using base confidence.")
+                    print(f"[DEBUG] Traceback:\n{traceback.format_exc()}")
                     final_confidence = result['confidence']
                     needs_manual_review = result['confidence'] < auto_reply_threshold
             else:
+                print(f"[DECISION] No Smart Logic available. Using simple confidence check.")
                 # Fallback to simple confidence check
                 final_confidence = result['confidence']
                 needs_manual_review = result['confidence'] < auto_reply_threshold
+                print(f"  - Final Confidence: {final_confidence}%")
+                print(f"  - Needs Manual Review: {needs_manual_review}")
 
             # ZERO CONFIDENCE RULE: If unreadable files detected, force draft review
             if accumulated_h.has_unreadable_files:
-                print(f"[ZERO CONFIDENCE] Unreadable files detected in '{accumulated_h.chat_title}'. Sending to draft...")
+                print(f"\n[PATH: UNREADABLE FILES]")
+                print(f"  - Unreadable files detected in '{accumulated_h.chat_title}'. Forcing draft review...")
                 if draft_bot:
                     try:
+                        print(f"[DRAFT GEN] Generating reply with unreadable_files=True...")
                         reply_text, reply_confidence = await reply_generator.generate_reply(
                             chat_title=accumulated_h.chat_title,
                             message_history=accumulated_h.text,
                             analysis_report=result['report'],
                             has_unreadable_files=True
                         )
+                        print(f"[DRAFT GEN] Generated reply: confidence={reply_confidence}%, length={len(reply_text) if reply_text else 0}")
 
                         if reply_text:
                             # Store draft
+                            print(f"[DRAFT STORE] Storing draft in draft_system...")
                             draft_system.add_draft(accumulated_h.chat_id, accumulated_h.chat_title, reply_text, reply_confidence)
 
                             # Send to owner for review
+                            print(f"[DRAFT SEND] Sending draft to bot for review...")
                             await draft_bot.send_draft_for_review(accumulated_h.chat_id, accumulated_h.chat_title, reply_text, reply_confidence)
-                            print(f"[DRAFT] Unreadable files - Draft sent: '{accumulated_h.chat_title}'")
+                            print(f"[DRAFT SUCCESS] Draft sent to owner for review: '{accumulated_h.chat_title}'")
 
                             # Log to report
                             with open(file_name, "a", encoding="utf-8") as f:
@@ -373,24 +407,40 @@ async def run_core_logic():
                                 f.write(f"Reply Confidence: {reply_confidence}%\n")
                                 f.write(f"Reason: Message contains unreadable file\n")
                                 f.write(f"Draft: {reply_text}\n")
+                        else:
+                            print(f"[DRAFT FAIL] No reply text generated")
 
                     except Exception as e:
-                        print(f"[ERROR] Error creating draft for unreadable files: {e}")
+                        print(f"[ERROR] Error creating draft for unreadable files: {type(e).__name__}: {e}")
+                        print(f"[DEBUG] Traceback:\n{traceback.format_exc()}")
+                else:
+                    print(f"[ERROR] Draft bot not available - cannot send draft")
 
             # If smart confidence >= 90% and working hours and NO unreadable files - auto-reply
             elif final_confidence >= 90 and is_working_hours():
+                print(f"\n[PATH: AUTO-REPLY]")
+                print(f"  - Confidence {final_confidence}% >= 90% threshold: YES")
+                print(f"  - Working hours: YES")
+                print(f"  - Unreadable files: NO")
+                print(f"  - Proceeding with AUTO-REPLY...")
+
                 try:
+                    print(f"[REPLY GEN] Generating auto-reply text...")
                     reply_text, reply_confidence = await reply_generator.generate_reply(
                         chat_title=accumulated_h.chat_title,
                         message_history=accumulated_h.text,
                         analysis_report=result['report'],
                         has_unreadable_files=False
                     )
+                    print(f"[REPLY GEN] Generated: confidence={reply_confidence}%, length={len(reply_text) if reply_text else 0}")
 
                     if reply_text and reply_confidence >= 70:
                         # Send automatic reply
+                        print(f"[SEND MSG] Sending auto-reply via collector.client.send_message...")
+                        print(f"  - Chat ID: {accumulated_h.chat_id}")
+                        print(f"  - Message: {reply_text[:100]}...")
                         await collector.client.send_message(accumulated_h.chat_id, reply_text)
-                        print(f"[AUTO-REPLY] Sent to '{accumulated_h.chat_title}' ({reply_confidence}%)")
+                        print(f"[AUTO-REPLY SUCCESS] Message sent to '{accumulated_h.chat_title}' ({reply_confidence}%)")
 
                         # Log to report
                         with open(file_name, "a", encoding="utf-8") as f:
@@ -398,37 +448,56 @@ async def run_core_logic():
                             f.write(f"Reply Confidence: {reply_confidence}%\n")
                             f.write(f"Message: {reply_text}\n")
                     else:
-                        print(f"[AUTO-REPLY] Low confidence ({reply_confidence}%), skipping")
+                        print(f"[AUTO-REPLY SKIP] Reply confidence {reply_confidence}% < 70%, skipping auto-reply")
 
                 except Exception as e:
-                    print(f"[ERROR] Auto-reply error: {e}")
+                    print(f"[ERROR] Auto-reply error: {type(e).__name__}: {e}")
+                    print(f"[DEBUG] Traceback:\n{traceback.format_exc()}")
 
             # If smart decision recommends manual review - send draft for review
             elif needs_manual_review and draft_bot:
+                print(f"\n[PATH: MANUAL REVIEW]")
+                print(f"  - Needs manual review: YES")
+                print(f"  - Draft bot available: YES")
+                print(f"  - Sending draft for owner review...")
+
                 try:
+                    print(f"[DRAFT GEN] Generating draft reply...")
                     reply_text, reply_confidence = await reply_generator.generate_reply(
                         chat_title=accumulated_h.chat_title,
                         message_history=accumulated_h.text,
                         analysis_report=result['report'],
                         has_unreadable_files=False
                     )
+                    print(f"[DRAFT GEN] Generated: confidence={reply_confidence}%, length={len(reply_text) if reply_text else 0}")
 
                     if reply_text:
                         # Store draft
+                        print(f"[DRAFT STORE] Storing draft in draft_system...")
                         draft_system.add_draft(accumulated_h.chat_id, accumulated_h.chat_title, reply_text, reply_confidence)
 
                         # Send to owner for review
+                        print(f"[DRAFT SEND] Sending draft to bot owner for review...")
                         await draft_bot.send_draft_for_review(accumulated_h.chat_id, accumulated_h.chat_title, reply_text, reply_confidence)
-                        print(f"[DRAFT] Draft sent: '{accumulated_h.chat_title}' ({reply_confidence}%)")
+                        print(f"[DRAFT SUCCESS] Draft sent to owner: '{accumulated_h.chat_title}' ({reply_confidence}%)")
 
                         # Log to report
                         with open(file_name, "a", encoding="utf-8") as f:
                             f.write(f"\n\n[DRAFT FOR REVIEW]\n")
                             f.write(f"Reply Confidence: {reply_confidence}%\n")
                             f.write(f"Draft: {reply_text}\n")
+                    else:
+                        print(f"[DRAFT FAIL] No reply text generated")
 
                 except Exception as e:
-                    print(f"[ERROR] Draft creation error: {e}")
+                    print(f"[ERROR] Draft creation error: {type(e).__name__}: {e}")
+                    print(f"[DEBUG] Traceback:\n{traceback.format_exc()}")
+            else:
+                print(f"\n[PATH: NO ACTION]")
+                print(f"  - Needs manual review: {needs_manual_review}")
+                print(f"  - Draft bot available: {draft_bot is not None}")
+                print(f"  - Final confidence: {final_confidence}%")
+                print(f"  - No action taken for this message")
 
             # Інтеграція з Trello (якщо критична впевненість)
             if trello and result['confidence'] >= 80:

@@ -21,25 +21,55 @@ class TelegramService:
 
     async def connect(self):
         """Connect to Telegram using bot token"""
+        print(f"\n[TG_SERVICE] >>> Connecting to Telegram...")
+        print(f"[TG_SERVICE] API ID: {self.api_id}")
+        print(f"[TG_SERVICE] API Hash: {'*' * 10}...")
+        print(f"[TG_SERVICE] Bot Token: ...{self.bot_token[-10:]}")
+        print(f"[TG_SERVICE] Session: {self.session_name}")
+
         for attempt in range(3):
             try:
-                print(f"[TG_SERVICE] Connection attempt {attempt + 1}/3...")
+                print(f"\n[TG_SERVICE] [ATTEMPT {attempt + 1}/3] Creating TelegramClient...")
                 self.client = TelegramClient(self.session_name, self.api_id, self.api_hash)
+
+                print(f"[TG_SERVICE] [ATTEMPT {attempt + 1}/3] Connecting to Telegram servers...")
                 await self.client.connect()
+                print(f"[TG_SERVICE] [ATTEMPT {attempt + 1}/3] ✅ TCP connection established")
+
+                print(f"[TG_SERVICE] [ATTEMPT {attempt + 1}/3] Starting with bot token...")
                 await self.client.start(bot_token=self.bot_token)
-                print("[TG_SERVICE] [OK] Connected to Telegram with Bot API")
+                print(f"[TG_SERVICE] [ATTEMPT {attempt + 1}/3] ✅ Bot authenticated")
+
+                # Verify connection
+                me = await self.client.get_me()
+                print(f"[TG_SERVICE] ✅ [SUCCESS] Connected as bot: @{me.username if me.username else 'no_username'}")
+                print(f"[TG_SERVICE] ✅ Bot ID: {me.id}")
+                print(f"[TG_SERVICE] ✅ Bot is valid: {me.is_bot}")
+                print(f"[TG_SERVICE] ✅ Session is active and ready for messaging")
                 return True
+
             except AuthKeyUnregisteredError as e:
-                print(f"[TG_SERVICE] [ERROR] AuthKeyUnregisteredError: {e}")
+                print(f"[TG_SERVICE] ❌ [AUTH ERROR] Attempt {attempt + 1}/3")
+                print(f"[TG_SERVICE] Error: {e}")
+                print(f"[TG_SERVICE] Cleaning up session files...")
                 await self._recover_from_auth_error()
                 if attempt < 2:
-                    await asyncio.sleep(2 ** attempt)
-            except Exception as e:
-                print(f"[TG_SERVICE] [ERROR] Connection error: {type(e).__name__}: {e}")
-                if attempt < 2:
-                    await asyncio.sleep(2 ** attempt)
+                    wait_time = 2 ** attempt
+                    print(f"[TG_SERVICE] Waiting {wait_time}s before retry...")
+                    await asyncio.sleep(wait_time)
 
-        print("[TG_SERVICE] [ERROR] Failed to connect after 3 attempts")
+            except Exception as e:
+                print(f"[TG_SERVICE] ❌ [ERROR] Attempt {attempt + 1}/3: {type(e).__name__}")
+                print(f"[TG_SERVICE] Message: {e}")
+                if attempt < 2:
+                    wait_time = 2 ** attempt
+                    print(f"[TG_SERVICE] Waiting {wait_time}s before retry...")
+                    await asyncio.sleep(wait_time)
+                else:
+                    print(f"[TG_SERVICE] [LAST ATTEMPT] Traceback:\n{traceback.format_exc()}")
+
+        print(f"\n[TG_SERVICE] ❌ [CRITICAL FAILURE] Could not connect after 3 attempts")
+        print(f"[TG_SERVICE] Check your Telegram credentials and internet connection")
         return False
 
     async def send_message(self, recipient_id: int, text: str, buttons=None):
@@ -54,36 +84,54 @@ class TelegramService:
         Returns:
             True if successful, False otherwise
         """
+        print(f"\n[TG_SERVICE] >>> send_message() called")
+        print(f"[TG_SERVICE] Recipient ID: {recipient_id} (type: {type(recipient_id).__name__})")
+        print(f"[TG_SERVICE] Text length: {len(text)} chars")
+        print(f"[TG_SERVICE] Has buttons: {buttons is not None}")
+        print(f"[TG_SERVICE] Client connected: {self.client is not None and self.client.is_connected() if self.client else False}")
+
         if not self.client:
-            print("[TG_SERVICE] [ERROR] Client not connected")
+            print(f"[TG_SERVICE] ❌ [ERROR] Client is None!")
             return False
+
+        if not self.client.is_connected():
+            print(f"[TG_SERVICE] ❌ [ERROR] Client not connected to Telegram!")
+            return False
+
+        print(f"[TG_SERVICE] ✅ Client is ready. Starting message send attempts...")
 
         for attempt in range(self.max_retries):
             try:
+                print(f"[TG_SERVICE] [ATTEMPT {attempt + 1}/{self.max_retries}] Sending message...")
                 # DIRECT INT ID - Critical to avoid GetUsersRequest error
                 await self.client.send_message(
                     int(recipient_id),  # Use int directly, no entity lookup
                     text,
                     buttons=buttons
                 )
-                print(f"[TG_SERVICE] [OK] Message sent to {recipient_id}")
+                print(f"[TG_SERVICE] ✅ [SUCCESS] Message delivered to {recipient_id}")
                 return True
 
             except AuthKeyUnregisteredError as e:
-                print(f"[TG_SERVICE] [ERROR] Auth error on attempt {attempt + 1}/{self.max_retries}")
+                print(f"[TG_SERVICE] ⚠️  [AUTH ERROR] Attempt {attempt + 1}/{self.max_retries}")
+                print(f"[TG_SERVICE] Error: {e}")
                 await self._recover_from_auth_error()
                 if attempt < self.max_retries - 1:
-                    await asyncio.sleep(2 ** attempt)
+                    wait_time = 2 ** attempt
+                    print(f"[TG_SERVICE] Waiting {wait_time}s before retry...")
+                    await asyncio.sleep(wait_time)
 
             except Exception as e:
-                print(f"[TG_SERVICE] [ERROR] Error on attempt {attempt + 1}/{self.max_retries}")
-                print(f"[TG_SERVICE] {type(e).__name__}: {e}")
+                print(f"[TG_SERVICE] ❌ [ERROR] Attempt {attempt + 1}/{self.max_retries}")
+                print(f"[TG_SERVICE] Exception: {type(e).__name__}: {e}")
                 if attempt < self.max_retries - 1:
-                    await asyncio.sleep(2 ** attempt)
+                    wait_time = 2 ** attempt
+                    print(f"[TG_SERVICE] Waiting {wait_time}s before retry...")
+                    await asyncio.sleep(wait_time)
                 else:
-                    print(f"[TG_SERVICE] Full traceback:\n{traceback.format_exc()}")
+                    print(f"[TG_SERVICE] [LAST ATTEMPT FAILED] Full traceback:\n{traceback.format_exc()}")
 
-        print(f"[TG_SERVICE] [ERROR] Failed to send message after {self.max_retries} attempts")
+        print(f"[TG_SERVICE] ❌ [FINAL FAILURE] Could not send message after {self.max_retries} attempts")
         return False
 
     async def disconnect(self):

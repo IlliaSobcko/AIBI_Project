@@ -572,47 +572,64 @@ Note: Automatic backup will be created before changes.
         confidence: int
     ):
         """Send draft to owner for review with inline keyboard buttons"""
-        print(f"DEBUG: Attempting to send draft to ID: {self.owner_id}")
-        print(f"DEBUG: Owner ID type: {type(self.owner_id)}, chat_id type: {type(chat_id)}")
+        print(f"\n[DRAFT SEND START] Attempting to send draft for review...")
+        print(f"[DRAFT SEND] Owner ID: {self.owner_id} (type: {type(self.owner_id).__name__})")
+        print(f"[DRAFT SEND] Chat ID: {chat_id} (title: {chat_title})")
+        print(f"[DRAFT SEND] Draft text length: {len(draft_text)} chars")
+        print(f"[DRAFT SEND] Confidence: {confidence}%")
 
         if self.owner_id == 0 or self.owner_id is None:
-            print("[WARNING] OWNER_TELEGRAM_ID not set in .env (owner_id=0 or None)")
+            print(f"[ERROR] OWNER_TELEGRAM_ID not configured! owner_id={self.owner_id}")
+            print(f"[ERROR] Set OWNER_TELEGRAM_ID in .env and restart the server")
             return
 
+        print(f"[DRAFT SEND] Owner ID is valid: {self.owner_id}")
+        print(f"[DRAFT SEND] TelegramService available: {self.tg_service is not None}")
+        print(f"[DRAFT SEND] TelegramService client connected: {self.tg_service.client is not None if self.tg_service else False}")
+
         # Format the draft message
-        message = f"""NEW DRAFT FOR REVIEW
+        message = f"""🤖 **NEW DRAFT FOR REVIEW**
 
-Chat: {chat_title}
-AI Confidence: {confidence}%
-Chat ID: {chat_id}
+**Chat**: {chat_title}
+**AI Confidence**: {confidence}%
+**Chat ID**: {chat_id}
 
-PROPOSED RESPONSE:
+**PROPOSED RESPONSE:**
 {draft_text}
 
 ━━━━━━━━━━━━━━━━━━━━
-Choose action:
+**Choose action:**
 """
 
         # Create inline keyboard buttons with Ukrainian text
         buttons = [
             [
-                Button.inline("✅ ВІДПРАВИТИ", data=f"send_{chat_id}"),
-                Button.inline("📝 РЕДАГУВАТИ", data=f"edit_{chat_id}"),
-                Button.inline("❌ ПРОПУСТИТИ", data=f"skip_{chat_id}")
+                Button.inline("✅ SEND NOW", data=f"send_{chat_id}"),
+                Button.inline("📝 EDIT", data=f"edit_{chat_id}"),
+                Button.inline("❌ SKIP", data=f"skip_{chat_id}")
             ]
         ]
 
         # Use TelegramService to send message (includes retry logic)
-        success = await self.tg_service.send_message(
-            recipient_id=self.owner_id,
-            text=message,
-            buttons=buttons
-        )
+        print(f"[DRAFT SEND] Calling tg_service.send_message()...")
+        try:
+            success = await self.tg_service.send_message(
+                recipient_id=self.owner_id,
+                text=message,
+                buttons=buttons
+            )
 
-        if success:
-            print(f"[DRAFT BOT] Draft sent to owner ({self.owner_id}) for review: {chat_title}")
-        else:
-            print(f"[ERROR] [FINAL_FAILURE] Draft could not be sent after retries")
+            if success:
+                print(f"[DRAFT SUCCESS] ✅ Draft message delivered to owner ({self.owner_id})")
+                print(f"[DRAFT SUCCESS] Chat: {chat_title}")
+            else:
+                print(f"[DRAFT FAILED] ❌ Draft message FAILED after retries")
+                print(f"[DRAFT FAILED] TelegramService returned False")
+                print(f"[DRAFT FAILED] Check OWNER_TELEGRAM_ID or Telegram connection")
+
+        except Exception as e:
+            print(f"[DRAFT ERROR] ❌ Exception while sending draft: {type(e).__name__}: {e}")
+            print(f"[DRAFT ERROR] Traceback:\n{traceback.format_exc()}")
 
     async def approve_and_send(self, chat_id: int, event):
         """Approve and send the draft"""
