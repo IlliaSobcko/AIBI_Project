@@ -76,6 +76,12 @@ def settings_page():
 
 # --- API ENDPOINTS ---
 
+@api_bp.route('/test_debug', methods=['GET'])
+def api_test_debug():
+    """Debug endpoint to verify routes are loaded"""
+    return jsonify({"status": "Routes are loaded!", "route_count": 10}), 200
+
+
 @api_bp.route('/chats', methods=['GET'])
 def api_get_chats():
     """
@@ -429,13 +435,17 @@ def api_send_reply():
         if not reply_text.strip():
             return jsonify({"error": "Reply text cannot be empty"}), 400
 
-        # Send via Telegram
+        # Send via Telegram using Draft Bot's TelegramService
         async def send_msg():
-            from main import collector
-            if collector and collector.client:
-                await collector.client.send_message(chat_id, reply_text)
-                return {"success": True}
-            raise Exception("Telegram client unavailable")
+            from main import DRAFT_BOT
+            if DRAFT_BOT and DRAFT_BOT.tg_service:
+                success = await DRAFT_BOT.tg_service.send_message(chat_id, reply_text)
+                if success:
+                    return {"success": True, "message": f"Reply sent to chat {chat_id}"}
+                else:
+                    raise Exception("Failed to send message via TelegramService")
+            else:
+                raise Exception("Telegram service not initialized")
 
         result = run_async(send_msg())
         print(f"[WEB] Reply sent to chat {chat_id}")

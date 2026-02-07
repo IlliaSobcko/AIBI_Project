@@ -23,6 +23,7 @@ from features.smart_logic import SmartDecisionEngine, DataSourceManager
 
 load_dotenv()
 app = Flask(__name__)
+print(f"[DEBUG] Flask app instance created: {id(app)}")
 app.secret_key = os.getenv("FLASK_SECRET_KEY", os.urandom(32))
 ensure_dir("reports")
 ensure_dir("analysis_cache")
@@ -555,13 +556,26 @@ else:
 # --- BLUEPRINT REGISTRATION ---
 def register_blueprints():
     """Register web blueprints (imported inside to avoid circular imports)"""
-    from web.routes import web_bp, api_bp
-    app.register_blueprint(web_bp)
-    app.register_blueprint(api_bp)
+    print("[DEBUG] register_blueprints() called")
+    try:
+        from web.routes import web_bp, api_bp
+        print(f"[DEBUG] Imported blueprints. web_bp routes: {len(list(web_bp.deferred_functions))}, api_bp routes: {len(list(api_bp.deferred_functions))}")
+        app.register_blueprint(web_bp)
+        app.register_blueprint(api_bp)
+        print("[DEBUG] Blueprints registered successfully")
+    except Exception as e:
+        import traceback
+        print(f"[DEBUG] ERROR in register_blueprints: {e}")
+        traceback.print_exc()
 
 
 # Register blueprints before running the app
 register_blueprints()
+
+# Test direct route (not via blueprint)
+@app.route('/api/direct_test')
+def direct_test():
+    return {"status": "Direct route works"}, 200
 
 if __name__ == "__main__":
     print("=" * 80)
