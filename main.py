@@ -469,18 +469,60 @@ async def run_core_logic():
                     print(f"[REPLY GEN] Generated: confidence={reply_confidence}%, length={len(reply_text) if reply_text else 0}")
 
                     if reply_text and reply_confidence >= 70:
-                        # Send automatic reply
-                        print(f"[SEND MSG] Sending auto-reply via collector.client.send_message...")
+                        # Send automatic reply with fallback mechanism
+                        print(f"[SEND MSG] Sending auto-reply with fallback mechanism...")
                         print(f"  - Chat ID: {accumulated_h.chat_id}")
                         print(f"  - Message: {reply_text[:100]}...")
-                        await collector.client.send_message(accumulated_h.chat_id, reply_text)
-                        print(f"[AUTO-REPLY SUCCESS] Message sent to '{accumulated_h.chat_title}' ({reply_confidence}%)")
 
-                        # Log to report
-                        with open(file_name, "a", encoding="utf-8") as f:
-                            f.write(f"\n\n[AUTO-REPLY SENT]\n")
-                            f.write(f"Reply Confidence: {reply_confidence}%\n")
-                            f.write(f"Message: {reply_text}\n")
+                        send_success = False
+                        send_method = None
+
+                        # Try 1: Use userbot (collector) first
+                        try:
+                            print(f"[SEND MSG] [ATTEMPT 1] Trying collector.client.send_message...")
+                            await collector.client.send_message(accumulated_h.chat_id, reply_text)
+                            print(f"[SEND MSG] ✅ Sent via USERBOT (collector)")
+                            send_success = True
+                            send_method = "USERBOT"
+                        except Exception as e:
+                            print(f"[SEND MSG] ⚠️  [ATTEMPT 1 FAILED] Userbot error: {type(e).__name__}: {e}")
+
+                            # Try 2: Fallback to bot service if available
+                            if draft_bot and hasattr(draft_bot, 'tg_service') and draft_bot.tg_service:
+                                try:
+                                    print(f"[SEND MSG] [ATTEMPT 2] Trying bot service fallback...")
+                                    success = await draft_bot.tg_service.send_message(
+                                        int(accumulated_h.chat_id),
+                                        reply_text
+                                    )
+                                    if success:
+                                        print(f"[SEND MSG] ✅ Sent via BOT SERVICE (fallback)")
+                                        send_success = True
+                                        send_method = "BOT_SERVICE"
+                                    else:
+                                        print(f"[SEND MSG] ❌ [ATTEMPT 2 FAILED] Bot service returned False")
+                                except Exception as e2:
+                                    print(f"[SEND MSG] ❌ [ATTEMPT 2 FAILED] Bot service error: {type(e2).__name__}: {e2}")
+                            else:
+                                print(f"[SEND MSG] ℹ️  Bot service not available for fallback")
+
+                        if send_success:
+                            print(f"[AUTO-REPLY SUCCESS] Message sent to '{accumulated_h.chat_title}' ({reply_confidence}%) via {send_method}")
+
+                            # Log to report
+                            with open(file_name, "a", encoding="utf-8") as f:
+                                f.write(f"\n\n[AUTO-REPLY SENT]\n")
+                                f.write(f"Reply Confidence: {reply_confidence}%\n")
+                                f.write(f"Send Method: {send_method}\n")
+                                f.write(f"Message: {reply_text}\n")
+                        else:
+                            print(f"[AUTO-REPLY FAILED] Could not send message via any method")
+                            # Log the failure
+                            with open(file_name, "a", encoding="utf-8") as f:
+                                f.write(f"\n\n[AUTO-REPLY FAILED]\n")
+                                f.write(f"Reply Confidence: {reply_confidence}%\n")
+                                f.write(f"Reason: Both userbot and bot service failed\n")
+                                f.write(f"Message: {reply_text}\n")
                     else:
                         print(f"[AUTO-REPLY SKIP] Reply confidence {reply_confidence}% < 70%, skipping auto-reply")
 
