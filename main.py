@@ -28,9 +28,46 @@ app.secret_key = os.getenv("FLASK_SECRET_KEY", os.urandom(32))
 ensure_dir("reports")
 ensure_dir("analysis_cache")
 
-# Global draft bot instance - runs continuously in background
+# Global Bot Registry - Thread-safe singleton for accessing bot instance
+class BotRegistry:
+    """Thread-safe registry for global bot instance"""
+    _instance = None
+    _lock = threading.Lock()
+
+    def __init__(self):
+        self.bot = None
+        self.event_loop = None
+        self.lock = threading.Lock()
+
+    @classmethod
+    def get_instance(cls):
+        if cls._instance is None:
+            with cls._lock:
+                if cls._instance is None:
+                    cls._instance = BotRegistry()
+        return cls._instance
+
+    def set_bot(self, bot, event_loop):
+        with self.lock:
+            self.bot = bot
+            self.event_loop = event_loop
+
+    def get_bot(self):
+        with self.lock:
+            return self.bot
+
+    def get_event_loop(self):
+        with self.lock:
+            return self.event_loop
+
+    def has_bot(self):
+        with self.lock:
+            return self.bot is not None
+
+# Global instances
 DRAFT_BOT = None
 BOT_EVENT_LOOP = None
+BOT_REGISTRY = BotRegistry.get_instance()
 
 # Global instances for web UI
 ANALYSIS_CACHE = AnalysisCache(cache_dir="analysis_cache", ttl_hours=int(os.getenv("ANALYSIS_CACHE_TTL_HOURS", "1")))
@@ -104,47 +141,80 @@ message_accumulator = MessageAccumulator(window_seconds=7)  # 7 second grouping 
 # --- DRAFT BOT BACKGROUND STARTUP ---
 def start_draft_bot_background():
     """Start draft bot in a separate thread with its own event loop"""
-    global DRAFT_BOT, BOT_EVENT_LOOP
+    global DRAFT_BOT, BOT_EVENT_LOOP, BOT_REGISTRY
 
     def run_bot():
-        """Run bot in background thread with its own event loop"""
+        """Run bot in background thread with its own event loop - NEVER BLOCK THE LOOP"""
+        loop = None
         try:
-            BOT_EVENT_LOOP = asyncio.new_event_loop()
-            asyncio.set_event_loop(BOT_EVENT_LOOP)
+            # Create new event loop for this thread
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+
+            # Set loop to not close on garbage collection
+            loop.set_debug(False)
 
             owner_id = os.getenv("OWNER_TELEGRAM_ID", "0")
             bot_token = os.getenv("TELEGRAM_BOT_TOKEN", "")
 
             if owner_id == "0" or owner_id == "your_telegram_id_here" or not bot_token:
                 print("[DRAFT BOT] [WARNING] Skipping bot startup - OWNER_TELEGRAM_ID or TELEGRAM_BOT_TOKEN not configured")
+                if loop:
+                    loop.close()
                 return
 
-            print("[DRAFT BOT] [STARTUP] Starting background bot listener...")
+            print("[DRAFT BOT] [STARTUP] Starting background bot listener in separate event loop...")
 
-            DRAFT_BOT = DraftReviewBot(
+            bot = DraftReviewBot(
                 api_id=int(os.getenv("TG_API_ID")),
                 api_hash=os.getenv("TG_API_HASH"),
                 bot_token=bot_token,
                 owner_id=int(owner_id)
             )
 
-            success = BOT_EVENT_LOOP.run_until_complete(DRAFT_BOT.start())
+            # Register bot in global registry BEFORE starting
+            BOT_REGISTRY.set_bot(bot, loop)
+            global DRAFT_BOT, BOT_EVENT_LOOP
+            DRAFT_BOT = bot
+            BOT_EVENT_LOOP = loop
+
+            # Start the bot
+            success = loop.run_until_complete(bot.start())
 
             if success:
-                print("[DRAFT BOT] [OK] Bot listener is ONLINE - Ready to receive buttons & commands")
-                # Keep event loop running to process events
-                BOT_EVENT_LOOP.run_forever()
+                print("[DRAFT BOT] [OK] Bot listener is ONLINE and listening for messages...")
+                print("[DRAFT BOT] [OK] Event loop running continuously in background thread")
+                print("[DRAFT BOT] [OK] Flask web server will NOT block bot messages")
+                # Run event loop forever to process incoming messages
+                # This will NOT block Flask because it's in a separate thread
+                loop.run_forever()
             else:
-                print("[DRAFT BOT] [ERROR] Bot failed to start")
+                print("[DRAFT BOT] [ERROR] Bot failed to start - check credentials")
 
+        except asyncio.CancelledError:
+            print("[DRAFT BOT] [INFO] Bot loop cancelled (graceful shutdown)")
         except Exception as e:
             print(f"[DRAFT BOT] [ERROR] Background bot error: {type(e).__name__}: {e}")
-            print(f"[DRAFT BOT] Full traceback:\n{traceback.format_exc()}")
+            import traceback as tb
+            print(f"[DRAFT BOT] Full traceback:\n{tb.format_exc()}")
+        finally:
+            try:
+                if loop and not loop.is_closed():
+                    # Cancel all pending tasks before closing
+                    pending = asyncio.all_tasks(loop)
+                    for task in pending:
+                        task.cancel()
+                    # Give tasks time to cancel
+                    loop.run_until_complete(asyncio.gather(*pending, return_exceptions=True))
+                    loop.close()
+                    print("[DRAFT BOT] [OK] Event loop closed cleanly")
+            except Exception as e:
+                print(f"[DRAFT BOT] [ERROR] Error closing loop: {e}")
 
-    # Start bot in daemon thread
+    # Start bot in daemon thread (won't block Flask)
     bot_thread = threading.Thread(target=run_bot, daemon=True)
     bot_thread.start()
-    print("[SYSTEM] Background bot thread started")
+    print("[SYSTEM] Background bot thread started (non-blocking)")
 
 # --- ЛОГІКА ОБ'ЄДНАННЯ ІНСТРУКЦІЙ ---
 def get_combined_instructions():

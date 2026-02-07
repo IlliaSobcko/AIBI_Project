@@ -422,7 +422,7 @@ def api_scheduler_status():
 def api_send_reply():
     """
     POST /api/send_reply
-    Send reply via Telegram
+    Send reply via Telegram using global bot registry
     """
     try:
         data = request.get_json()
@@ -435,26 +435,52 @@ def api_send_reply():
         if not reply_text.strip():
             return jsonify({"error": "Reply text cannot be empty"}), 400
 
-        # Send via Telegram using Draft Bot's TelegramService
+        # Get bot from global registry
         async def send_msg():
-            from main import DRAFT_BOT
-            if DRAFT_BOT and DRAFT_BOT.tg_service:
-                success = await DRAFT_BOT.tg_service.send_message(chat_id, reply_text)
+            from main import BOT_REGISTRY
+
+            bot = BOT_REGISTRY.get_bot()
+            if not bot:
+                raise Exception("Telegram bot not initialized - bot not started")
+
+            if not bot.tg_service:
+                raise Exception("Telegram service not initialized")
+
+            try:
+                # Send message using the bot's telegram service
+                success = await bot.tg_service.send_message(chat_id, reply_text)
                 if success:
                     return {"success": True, "message": f"Reply sent to chat {chat_id}"}
                 else:
                     raise Exception("Failed to send message via TelegramService")
-            else:
-                raise Exception("Telegram service not initialized")
+            except Exception as e:
+                print(f"[WEB] Send error: {e}")
+                raise Exception(f"Failed to send message: {str(e)}")
 
-        result = run_async(send_msg())
+        # Get event loop from registry to execute in bot's context
+        bot_loop = None
+        try:
+            from main import BOT_REGISTRY
+            bot_loop = BOT_REGISTRY.get_event_loop()
+        except:
+            pass
+
+        if bot_loop and bot_loop.is_running():
+            # Submit task to bot's event loop
+            import concurrent.futures
+            future = asyncio.run_coroutine_threadsafe(send_msg(), bot_loop)
+            result = future.result(timeout=10)
+        else:
+            # Fallback: run in current event loop
+            result = run_async(send_msg())
+
         print(f"[WEB] Reply sent to chat {chat_id}")
         return jsonify(result), 200
 
     except Exception as e:
         import traceback
         traceback.print_exc()
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"error": f"Send reply failed: {str(e)}"}), 500
 
 
 @api_bp.route('/analytics_download', methods=['GET'])

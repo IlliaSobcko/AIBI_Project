@@ -62,8 +62,9 @@ class DraftReviewBot:
         # Register handlers
         self._register_button_handler()
         self._register_text_message_handler()
+        self._register_new_message_handler()
 
-        print("[DRAFT BOT] Started and waiting for button interactions...")
+        print("[DRAFT BOT] Started - listening for button interactions AND new messages...")
 
         # Send startup notification to owner
         await self.send_startup_notification()
@@ -133,6 +134,43 @@ System is ready to process drafts and commands.
                     await event.answer(f"Error: {type(e).__name__}")
                 except:
                     pass
+
+    def _register_new_message_handler(self):
+        """Register handler for new messages from all users (for forwarding to analysis)"""
+        @self.client.on(events.NewMessage(incoming=True))
+        async def new_message_handler(event):
+            try:
+                # Skip messages from owner (handled by text handler)
+                if event.sender_id == self.owner_id:
+                    return
+
+                # Skip bot messages
+                if event.sender_id == 777000:  # Telegram notification ID
+                    return
+
+                # Log incoming message
+                sender = await event.get_sender()
+                sender_name = sender.first_name if hasattr(sender, 'first_name') else str(sender.id)
+                message_text = event.message.text or "[Non-text message]"
+
+                print(f"[DRAFT BOT] [NEW MESSAGE] From {sender_name} (ID: {event.sender_id}): {message_text[:100]}")
+
+                # Forward message notification to owner for awareness
+                if self.owner_id and event.sender_id != self.owner_id:
+                    try:
+                        notification = f"📨 New message from {sender_name}:\n\n{message_text[:200]}"
+                        if len(message_text) > 200:
+                            notification += "..."
+
+                        await self.tg_service.send_message(
+                            recipient_id=self.owner_id,
+                            text=notification
+                        )
+                    except Exception as e:
+                        print(f"[WARNING] Failed to forward notification: {e}")
+
+            except Exception as e:
+                print(f"[ERROR] New message handler exception: {type(e).__name__}: {e}")
 
     def _register_text_message_handler(self):
         """Register text message handler for commands and edit replies"""
