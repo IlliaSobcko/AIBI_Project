@@ -1,6 +1,6 @@
 C:\Users\Illia\AppData\Local\Programs\Python\Python310\lib\site-packages\google\api_core\_python_version_support.py:266: FutureWarning: You are using a Python version (3.10.7) which Google will stop supporting in new releases of google.api_core once it reaches its end of life (2026-10-04). Please upgrade to the latest Python version, or at least Python 3.11, to continue receiving updates for google.api_core past that date.
   warnings.warn(message, FutureWarning)
-[DEBUG] Flask app instance created: 2364503663536
+[DEBUG] Flask app instance created: 2682029319088
 [SCHEDULER] Auto-analysis DISABLED (manual mode only)
 [DEBUG] register_blueprints() called
 [DEBUG] Imported blueprints. web_bp routes: 3, api_bp routes: 11
@@ -32,61 +32,19 @@ C:\Users\Illia\AppData\Local\Programs\Python\Python310\lib\site-packages\google\
  * Debug mode: off
 WARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.
  * Running on all addresses (0.0.0.0)
- * Running on http://127.0.0.1:9090
- * Running on http://10.241.225.71:9090
+ * Running on http://127.0.0.1:8080
+ * Running on http://10.241.225.71:8080
 Press CTRL+C to quit
-Traceback (most recent call last):
-  File "D:\projects\AIBI_Project\web\routes.py", line 450, in api_send_reply
-    result = run_async(send_msg())
-  File "D:\projects\AIBI_Project\web\routes.py", line 26, in run_async
-    return loop.run_until_complete(coroutine)
-  File "C:\Users\Illia\AppData\Local\Programs\Python\Python310\lib\asyncio\base_events.py", line 646, in run_until_complete
-    return future.result()
-  File "D:\projects\AIBI_Project\web\routes.py", line 448, in send_msg
-    raise Exception("Telegram service not initialized")
-Exception: Telegram service not initialized
-127.0.0.1 - - [07/Feb/2026 02:12:15] "POST /api/send_reply HTTP/1.1" 500 -
-127.0.0.1 - - [07/Feb/2026 02:12:27] "GET /api/test_debug HTTP/1.1" 200 -
-127.0.0.1 - - [07/Feb/2026 02:12:27] "GET /api/direct_test HTTP/1.1" 200 -
 Task was destroyed but it is pending!
-task: <Task pending name='Task-9' coro=<Connection._send_loop() done, defined at C:\Users\Illia\AppData\Local\Programs\Python\Python310\lib\site-packages\telethon\network\connection\connection.py:316> wait_for=<Future cancelled>>
-Exception ignored in: <coroutine object Connection._recv_loop at 0x000002269D5DE730>
+task: <Task pending name='Task-8' coro=<Connection._send_loop() done, defined at C:\Users\Illia\AppData\Local\Programs\Python\Python310\lib\site-packages\telethon\network\connection\connection.py:316> wait_for=<Future cancelled>>
+Exception ignored in: <coroutine object Connection._recv_loop at 0x000002707F43AE30>
 Traceback (most recent call last):
-  File "C:\Users\Illia\AppData\Local\Programs\Python\Python310\lib\asyncio\base_events.py", line 718, in call_later
-    timer = self.call_at(self.time() + delay, callback, *args,
+  File "C:\Users\Illia\AppData\Local\Programs\Python\Python310\lib\asyncio\base_events.py", line 429, in create_future
+    return futures.Future(loop=self)
 RuntimeError: coroutine ignored GeneratorExit
 Task was destroyed but it is pending!
-task: <Task pending name='Task-10' coro=<Connection._recv_loop() running at C:\Users\Illia\AppData\Local\Programs\Python\Python310\lib\site-packages\telethon\network\connection\connection.py:361> wait_for=<Future pending cb=[Task.task_wakeup()]>>
+task: <Task pending name='Task-9' coro=<Connection._recv_loop() running at C:\Users\Illia\AppData\Local\Programs\Python\Python310\lib\site-packages\telethon\network\connection\connection.py:361> wait_for=<Future pending cb=[Task.task_wakeup()]>>
 Task was destroyed but it is pending!
-task: <Task pending name='Task-11' coro=<MTProtoSender._send_loop() done, defined at C:\Users\Illia\AppData\Local\Programs\Python\Python310\lib\site-packages\telethon\network\mtprotosender.py:452> wait_for=<Future pending cb=[Task.task_wakeup()]>>
+task: <Task pending name='Task-10' coro=<MTProtoSender._send_loop() done, defined at C:\Users\Illia\AppData\Local\Programs\Python\Python310\lib\site-packages\telethon\network\mtprotosender.py:452> wait_for=<Future pending cb=[Task.task_wakeup()]>>
 Task was destroyed but it is pending!
-task: <Task pending name='Task-12' coro=<MTProtoSender._recv_loop() done, defined at C:\Users\Illia\AppData\Local\Programs\Python\Python310\lib\site-packages\telethon\network\mtprotosender.py:503> wait_for=<Future cancelled>>
-127.0.0.1 - - [07/Feb/2026 02:12:28] "GET /api/chats HTTP/1.1" 200 -
-Traceback (most recent call last):
-  File "D:\projects\AIBI_Project\web\routes.py", line 450, in api_send_reply
-    result = run_async(send_msg())
-  File "D:\projects\AIBI_Project\web\routes.py", line 26, in run_async
-    return loop.run_until_complete(coroutine)
-  File "C:\Users\Illia\AppData\Local\Programs\Python\Python310\lib\asyncio\base_events.py", line 646, in run_until_complete
-    return future.result()
-  File "D:\projects\AIBI_Project\web\routes.py", line 448, in send_msg
-    raise Exception("Telegram service not initialized")
-Exception: Telegram service not initialized
-127.0.0.1 - - [07/Feb/2026 02:12:28] "POST /api/send_reply HTTP/1.1" 500 -
-Task was destroyed but it is pending!
-task: <Task pending name='Task-3' coro=<Connection._send_loop() running at C:\Users\Illia\AppData\Local\Programs\Python\Python310\lib\site-packages\telethon\network\connection\connection.py:322> wait_for=<Future pending cb=[Task.task_wakeup()]>>
-Task was destroyed but it is pending!
-task: <Task pending name='Task-4' coro=<Connection._recv_loop() running at C:\Users\Illia\AppData\Local\Programs\Python\Python310\lib\site-packages\telethon\network\connection\connection.py:341> wait_for=<Future pending cb=[Task.task_wakeup()]>>
-Task was destroyed but it is pending!
-task: <Task pending name='Task-5' coro=<MTProtoSender._send_loop() running at C:\Users\Illia\AppData\Local\Programs\Python\Python310\lib\site-packages\telethon\network\mtprotosender.py:470> wait_for=<Future pending cb=[Task.task_wakeup()]>>
-Task was destroyed but it is pending!
-task: <Task pending name='Task-6' coro=<MTProtoSender._recv_loop() running at C:\Users\Illia\AppData\Local\Programs\Python\Python310\lib\site-packages\telethon\network\mtprotosender.py:513> wait_for=<Future pending cb=[Task.task_wakeup()]>>
-Exception ignored in: <coroutine object Connection._recv_loop at 0x000002269D4AA730>
-Traceback (most recent call last):
-  File "C:\Users\Illia\AppData\Local\Programs\Python\Python310\lib\site-packages\openpyxl\descriptors\serialisable.py", line 161, in __iter__
-    for attr in self.__attrs__:
-RuntimeError: coroutine ignored GeneratorExit
-127.0.0.1 - - [07/Feb/2026 02:12:28] "GET /api/analytics_download HTTP/1.1" 200 -
-127.0.0.1 - - [07/Feb/2026 02:12:28] "GET /api/knowledge_base HTTP/1.1" 200 -
-127.0.0.1 - - [07/Feb/2026 02:12:38] "GET /api/analytics_download HTTP/1.1" 200 -
-127.0.0.1 - - [07/Feb/2026 02:12:38] "GET /api/knowledge_base?type=prices HTTP/1.1" 200 -
+task: <Task pending name='Task-11' coro=<MTProtoSender._recv_loop() done, defined at C:\Users\Illia\AppData\Local\Programs\Python\Python310\lib\site-packages\telethon\network\mtprotosender.py:503> wait_for=<Future cancelled>>
