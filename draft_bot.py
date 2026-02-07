@@ -87,7 +87,7 @@ class DraftReviewBot:
         startup_message = f"""
 🤖 **SYSTEM RESTARTED**
 
-✅ Bot is now ONLINE and ready to receive commands
+[OK] Bot is now ONLINE and ready to receive commands
 
 Status:
   • Bot API: Connected
@@ -192,9 +192,9 @@ System is ready to process drafts and commands.
                         from main import run_core_logic
                         try:
                             result = await run_core_logic()
-                            await event.reply(f"✅ Analysis complete: {result}")
+                            await event.reply(f"[OK] Analysis complete: {result}")
                         except Exception as e:
-                            error_msg = f"❌ Analysis failed: {type(e).__name__}: {str(e)}"
+                            error_msg = f"[ERROR] Analysis failed: {type(e).__name__}: {str(e)}"
                             print(f"[ERROR] {error_msg}")
                             print(f"[ERROR] Full traceback:\n{traceback.format_exc()}")
                             await event.reply(error_msg)
@@ -204,12 +204,12 @@ System is ready to process drafts and commands.
                     # ================================================================
                     elif message_text_lower == "/report":
                         print(f"[DRAFT BOT] Analytics /report command received from owner")
-                        await event.reply("📊 Scanning reports and generating analytics...")
+                        await event.reply("[STATS] Scanning reports and generating analytics...")
                         try:
                             summary = await self.generate_analytics_report()
                             await event.reply(summary)
                         except Exception as e:
-                            error_msg = f"❌ Report generation failed: {type(e).__name__}: {str(e)}"
+                            error_msg = f"[ERROR] Report generation failed: {type(e).__name__}: {str(e)}"
                             print(f"[ERROR] {error_msg}")
                             print(f"[ERROR] Full traceback:\n{traceback.format_exc()}")
                             await event.reply(error_msg)
@@ -219,11 +219,11 @@ System is ready to process drafts and commands.
                     # ================================================================
                     elif "Звіт" in message_text:
                         print(f"[DRAFT BOT] Report/Excel export command received from owner")
-                        await event.reply("📊 Generating Excel report... This will take a moment...")
+                        await event.reply("[STATS] Generating Excel report... This will take a moment...")
                         try:
                             await self.generate_excel_report(event)
                         except Exception as e:
-                            error_msg = f"❌ Report generation failed: {type(e).__name__}: {str(e)}"
+                            error_msg = f"[ERROR] Report generation failed: {type(e).__name__}: {str(e)}"
                             print(f"[ERROR] {error_msg}")
                             print(f"[ERROR] Full traceback:\n{traceback.format_exc()}")
                             await event.reply(error_msg)
@@ -327,7 +327,7 @@ Available Commands:
 """
                             await event.reply(response)
                         except Exception as e:
-                            error_msg = f"❌ Error: {type(e).__name__}: {str(e)}"
+                            error_msg = f"[ERROR] Error: {type(e).__name__}: {str(e)}"
                             print(f"[ERROR] {error_msg}")
                             await event.reply(error_msg)
 
@@ -368,7 +368,7 @@ Note: Automatic backup will be created before changes.
                             backups = manager.list_backups(limit=10)
 
                             if not backups:
-                                await event.reply("❌ No backups available yet")
+                                await event.reply("[ERROR] No backups available yet")
                                 return
 
                             response = "📦 **AVAILABLE BACKUPS** (Most recent first)\n\n"
@@ -378,7 +378,7 @@ Note: Automatic backup will be created before changes.
                             response += "\nUse: /rollback_backup [filename]\nExample: /rollback_backup instructions_backup_20240215_120000.txt"
                             await event.reply(response)
                         except Exception as e:
-                            error_msg = f"❌ Error: {type(e).__name__}: {str(e)}"
+                            error_msg = f"[ERROR] Error: {type(e).__name__}: {str(e)}"
                             print(f"[ERROR] {error_msg}")
                             await event.reply(error_msg)
 
@@ -404,7 +404,7 @@ Note: Automatic backup will be created before changes.
                                 f"{'[OK]' if result['success'] else '[ERROR]'} {result['message']}"
                             )
                         except Exception as e:
-                            error_msg = f"❌ Error: {type(e).__name__}: {str(e)}"
+                            error_msg = f"[ERROR] Error: {type(e).__name__}: {str(e)}"
                             print(f"[ERROR] {error_msg}")
                             await event.reply(error_msg)
 
@@ -422,7 +422,7 @@ Note: Automatic backup will be created before changes.
                             # Check for cancel
                             if text.upper() == "CANCEL":
                                 self.waiting_for_instructions = False
-                                await event.reply("❌ Instruction update cancelled")
+                                await event.reply("[ERROR] Instruction update cancelled")
                                 return
 
                             # Process based on mode
@@ -431,33 +431,33 @@ Note: Automatic backup will be created before changes.
                             if text.startswith("REPLACE:"):
                                 new_content = text[8:].strip()
                                 if not new_content:
-                                    await event.reply("❌ REPLACE mode requires content after the colon")
+                                    await event.reply("[ERROR] REPLACE mode requires content after the colon")
                                     return
                                 result = await manager.update_instructions(new_content, mode="replace")
 
                             elif text.startswith("APPEND:"):
                                 new_content = text[7:].strip()
                                 if not new_content:
-                                    await event.reply("❌ APPEND mode requires content after the colon")
+                                    await event.reply("[ERROR] APPEND mode requires content after the colon")
                                     return
                                 result = await manager.update_instructions(new_content, mode="append")
 
                             elif text.startswith("PREPEND:"):
                                 new_content = text[8:].strip()
                                 if not new_content:
-                                    await event.reply("❌ PREPEND mode requires content after the colon")
+                                    await event.reply("[ERROR] PREPEND mode requires content after the colon")
                                     return
                                 result = await manager.update_instructions(new_content, mode="prepend")
 
                             elif text.startswith("DYNAMIC:"):
                                 new_rule = text[8:].strip()
                                 if not new_rule:
-                                    await event.reply("❌ DYNAMIC mode requires content after the colon")
+                                    await event.reply("[ERROR] DYNAMIC mode requires content after the colon")
                                     return
                                 result = await manager.update_dynamic_instructions(new_rule)
 
                             else:
-                                await event.reply("❌ Invalid format. Use REPLACE:/APPEND:/PREPEND:/DYNAMIC:/CANCEL")
+                                await event.reply("[ERROR] Invalid format. Use REPLACE:/APPEND:/PREPEND:/DYNAMIC:/CANCEL")
                                 return
 
                             # Send result
@@ -472,7 +472,7 @@ Note: Automatic backup will be created before changes.
                             self.waiting_for_instructions = False
 
                         except Exception as e:
-                            error_msg = f"❌ Error: {type(e).__name__}: {str(e)}"
+                            error_msg = f"[ERROR] Error: {type(e).__name__}: {str(e)}"
                             print(f"[ERROR] {error_msg}")
                             await event.reply(error_msg)
                             self.waiting_for_instructions = False
@@ -604,9 +604,9 @@ Note: Automatic backup will be created before changes.
         # Create inline keyboard buttons with Ukrainian text
         buttons = [
             [
-                Button.inline("✅ SEND NOW", data=f"send_{chat_id}"),
+                Button.inline("[OK] SEND NOW", data=f"send_{chat_id}"),
                 Button.inline("📝 EDIT", data=f"edit_{chat_id}"),
-                Button.inline("❌ SKIP", data=f"skip_{chat_id}")
+                Button.inline("[ERROR] SKIP", data=f"skip_{chat_id}")
             ]
         ]
 
@@ -620,15 +620,15 @@ Note: Automatic backup will be created before changes.
             )
 
             if success:
-                print(f"[DRAFT SUCCESS] ✅ Draft message delivered to owner ({self.owner_id})")
+                print(f"[DRAFT SUCCESS] [OK] Draft message delivered to owner ({self.owner_id})")
                 print(f"[DRAFT SUCCESS] Chat: {chat_title}")
             else:
-                print(f"[DRAFT FAILED] ❌ Draft message FAILED after retries")
+                print(f"[DRAFT FAILED] [ERROR] Draft message FAILED after retries")
                 print(f"[DRAFT FAILED] TelegramService returned False")
                 print(f"[DRAFT FAILED] Check OWNER_TELEGRAM_ID or Telegram connection")
 
         except Exception as e:
-            print(f"[DRAFT ERROR] ❌ Exception while sending draft: {type(e).__name__}: {e}")
+            print(f"[DRAFT ERROR] [ERROR] Exception while sending draft: {type(e).__name__}: {e}")
             print(f"[DRAFT ERROR] Traceback:\n{traceback.format_exc()}")
 
     async def approve_and_send(self, chat_id: int, event):
@@ -796,11 +796,11 @@ Note: Automatic backup will be created before changes.
 
         reports_dir = Path("reports")
         if not reports_dir.exists():
-            return "❌ Reports folder not found"
+            return "[ERROR] Reports folder not found"
 
         report_files = list(reports_dir.glob("*.txt"))
         if not report_files:
-            return "❌ No reports found"
+            return "[ERROR] No reports found"
 
         print(f"[DRAFT BOT] [REPORT] Found {len(report_files)} report files")
 
@@ -834,10 +834,10 @@ Note: Automatic backup will be created before changes.
 
         # Format response
         summary = f"""
-📊 **ANALYTICS REPORT**
+[STATS] **ANALYTICS REPORT**
 
 📁 Total Chats Processed: {total_chats}
-✅ High Confidence (≥80%): {high_confidence_count}
+[OK] High Confidence (≥80%): {high_confidence_count}
 📝 Drafts/Replies: {drafted_count}
 
 ━━━━━━━━━━━━━━━━━━━━
@@ -873,11 +873,11 @@ Report generation completed at {__import__('datetime').datetime.now().strftime('
             excel_file_path = collector.export_to_excel("AIBI_Report.xlsx")
 
             if excel_file_path:
-                await event.reply(f"✅ Excel file ready: {excel_file_path}")
+                await event.reply(f"[OK] Excel file ready: {excel_file_path}")
                 print(f"[DRAFT BOT] [EXCEL] File exported successfully")
             else:
                 await event.reply(
-                    "⚠️ Excel file export requires openpyxl.\n"
+                    "[WARN] Excel file export requires openpyxl.\n"
                     "Install with: pip install openpyxl\n"
                     "Data collection is ready, awaiting library."
                 )
@@ -885,7 +885,7 @@ Report generation completed at {__import__('datetime').datetime.now().strftime('
             print("[DRAFT BOT] [EXCEL] Report generation complete")
 
         except Exception as e:
-            await event.reply(f"❌ Error generating Excel: {e}")
+            await event.reply(f"[ERROR] Error generating Excel: {e}")
             print(f"[ERROR] Excel generation error: {e}")
 
     # ========================================================================

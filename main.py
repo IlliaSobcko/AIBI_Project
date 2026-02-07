@@ -251,12 +251,12 @@ async def run_core_logic():
         print(f"\n[SESSION VERIFY] Checking Telegram session authentication...")
         try:
             me = await collector.client.get_me()
-            print(f"[SESSION VERIFY] ✅ Authenticated as: {me.first_name}")
+            print(f"[SESSION VERIFY] [OK] Authenticated as: {me.first_name}")
             print(f"[SESSION VERIFY] User ID: {me.id}")
             print(f"[SESSION VERIFY] Is Bot: {me.is_bot}")
             print(f"[SESSION VERIFY] Session Type: {'BOT' if me.is_bot else 'USERBOT'}")
         except Exception as e:
-            print(f"[SESSION VERIFY] ❌ Failed to verify session: {e}")
+            print(f"[SESSION VERIFY] [ERROR] Failed to verify session: {e}")
             print(f"[SESSION VERIFY] Messages may not send correctly")
 
         # Wait for draft bot to initialize
@@ -264,11 +264,11 @@ async def run_core_logic():
         max_wait = 50  # 5 seconds max
         for i in range(max_wait):
             if DRAFT_BOT is not None:
-                print(f"[INIT CHECK] ✅ Draft bot ready after {i*0.1:.1f}s")
+                print(f"[INIT CHECK] [OK] Draft bot ready after {i*0.1:.1f}s")
                 break
             await asyncio.sleep(0.1)
         else:
-            print(f"[INIT CHECK] ⚠️  Draft bot still initializing (>5s), proceeding anyway")
+            print(f"[INIT CHECK] [WARN]  Draft bot still initializing (>5s), proceeding anyway")
 
         print(f"\n[DIALOGS] Fetching chat list...")
         dialogs = await collector.list_dialogs(limit=15)
@@ -311,7 +311,7 @@ async def run_core_logic():
 
             dsm = DataSourceManager(calendar_client=calendar, trello_client=trello, business_data=business_data)
             decision_engine = SmartDecisionEngine(data_source_manager=dsm)
-            print("[MAIN] ✅ Smart Logic Decision Engine initialized successfully")
+            print("[MAIN] [OK] Smart Logic Decision Engine initialized successfully")
         except Exception as e:
             print(f"[WARNING] Smart Logic initialization failed: {e}")
             print(f"[DEBUG] Traceback:\n{traceback.format_exc()}")
@@ -481,11 +481,11 @@ async def run_core_logic():
                         try:
                             print(f"[SEND MSG] [ATTEMPT 1] Trying collector.client.send_message...")
                             await collector.client.send_message(accumulated_h.chat_id, reply_text)
-                            print(f"[SEND MSG] ✅ Sent via USERBOT (collector)")
+                            print(f"[SEND MSG] [OK] Sent via USERBOT (collector)")
                             send_success = True
                             send_method = "USERBOT"
                         except Exception as e:
-                            print(f"[SEND MSG] ⚠️  [ATTEMPT 1 FAILED] Userbot error: {type(e).__name__}: {e}")
+                            print(f"[SEND MSG] [WARN] [ATTEMPT 1 FAILED] Userbot error: {type(e).__name__}: {e}")
 
                             # Try 2: Fallback to bot service if available
                             if draft_bot and hasattr(draft_bot, 'tg_service') and draft_bot.tg_service:
@@ -496,15 +496,15 @@ async def run_core_logic():
                                         reply_text
                                     )
                                     if success:
-                                        print(f"[SEND MSG] ✅ Sent via BOT SERVICE (fallback)")
+                                        print(f"[SEND MSG] [OK] Sent via BOT SERVICE (fallback)")
                                         send_success = True
                                         send_method = "BOT_SERVICE"
                                     else:
-                                        print(f"[SEND MSG] ❌ [ATTEMPT 2 FAILED] Bot service returned False")
+                                        print(f"[SEND MSG] [ERROR] [ATTEMPT 2 FAILED] Bot service returned False")
                                 except Exception as e2:
-                                    print(f"[SEND MSG] ❌ [ATTEMPT 2 FAILED] Bot service error: {type(e2).__name__}: {e2}")
+                                    print(f"[SEND MSG] [ERROR] [ATTEMPT 2 FAILED] Bot service error: {type(e2).__name__}: {e2}")
                             else:
-                                print(f"[SEND MSG] ℹ️  Bot service not available for fallback")
+                                print(f"[SEND MSG] [INFO] Bot service not available for fallback")
 
                         if send_success:
                             print(f"[AUTO-REPLY SUCCESS] Message sent to '{accumulated_h.chat_title}' ({reply_confidence}%) via {send_method}")
