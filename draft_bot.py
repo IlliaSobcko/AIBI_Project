@@ -68,8 +68,9 @@ class DraftReviewBot:
         self._register_command_handler()
         self._register_text_message_handler()
         self._register_new_message_handler()
+        self._register_voice_handler()  # NEW: Phase 3 - Voice Integration
 
-        print("[DRAFT BOT] Started - listening for commands, buttons, and new messages...")
+        print("[DRAFT BOT] Started - listening for commands, buttons, messages, and VOICE...")
 
         # Send startup notification to owner
         await self.send_startup_notification()
@@ -323,6 +324,102 @@ System is ready to process drafts and commands.
 
             except Exception as e:
                 print(f"[ERROR] New message handler exception: {type(e).__name__}: {e}")
+
+    def _register_voice_handler(self):
+        """
+        Register handler for voice messages/audio files - Phase 3: Voice Integration
+
+        SECURITY: Only processes voice from owner (ID: 8040716622)
+
+        Supported Commands:
+        - "Звіт" or "Експорт" → Generate Excel report
+        - "Напиши [Ім'я]" → Generate draft for client
+        """
+        @self.client.on(events.NewMessage(from_users=self.owner_id))
+        async def voice_handler(event):
+            try:
+                # Check if message contains voice or audio
+                message = event.message
+
+                # Check for voice message
+                if not message.voice and not message.audio:
+                    return  # Not a voice/audio message
+
+                print(f"\n{'='*80}")
+                print(f"[VOICE] 🎤 Voice message received from owner (ID: {self.owner_id})")
+                print(f"{'='*80}")
+
+                # Send acknowledgment
+                await event.reply("🎤 [VOICE] Processing your voice command...")
+
+                # Download voice/audio file
+                import tempfile
+                from pathlib import Path
+
+                temp_dir = Path(tempfile.gettempdir())
+                voice_file = temp_dir / f"voice_{event.id}.ogg"
+
+                print(f"[VOICE] Downloading audio file...")
+                await message.download_media(file=str(voice_file))
+                print(f"[VOICE] ✓ Downloaded to: {voice_file}")
+
+                # Transcribe using Whisper
+                from voice_commands import get_voice_processor
+
+                voice_processor = get_voice_processor(self.owner_id)
+
+                if not voice_processor.whisper_model:
+                    await event.reply("❌ [VOICE] Whisper not available. Install: pip install openai-whisper")
+                    return
+
+                transcribed_text = await voice_processor.transcribe_voice_message(str(voice_file))
+
+                # Clean up temp file
+                try:
+                    voice_file.unlink()
+                except:
+                    pass
+
+                if not transcribed_text:
+                    await event.reply("❌ [VOICE] Failed to transcribe audio")
+                    return
+
+                # Send transcription confirmation
+                await event.reply(f"✅ [VOICE] Transcribed: \"{transcribed_text}\"")
+
+                # Recognize command
+                command_result = voice_processor.recognize_command(transcribed_text)
+
+                command_type = command_result["command"]
+
+                if command_type == "report":
+                    # Execute Excel report command
+                    print(f"[VOICE] Executing REPORT command...")
+                    await voice_processor.execute_report_command(event, self)
+
+                elif command_type == "draft":
+                    # Execute draft generation command
+                    client_name = command_result["params"]["client_name"]
+                    print(f"[VOICE] Executing DRAFT command for '{client_name}'...")
+                    await voice_processor.execute_draft_command(event, self, client_name)
+
+                else:
+                    # Unknown command
+                    await event.reply(
+                        f"❓ [VOICE] Unknown command.\n\n"
+                        f"Supported commands:\n"
+                        f"• 'Звіт' or 'Експорт' - Generate Excel report\n"
+                        f"• 'Напиши [Ім'я]' - Generate draft for client"
+                    )
+
+            except Exception as e:
+                print(f"[VOICE] [ERROR] {type(e).__name__}: {e}")
+                import traceback
+                traceback.print_exc()
+                try:
+                    await event.reply(f"❌ [VOICE] Error: {e}")
+                except:
+                    pass
 
     def _register_text_message_handler(self):
         """Register text message handler for commands and edit replies"""
