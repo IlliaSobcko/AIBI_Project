@@ -1,304 +1,109 @@
-# AIBI Web UI - Quick Reference Card
+# Quick Reference - Production Fixes
 
-## Starting the Application
+## 🎯 What Was Fixed
+
+### 1. [Edit] Button UX
+**Before**: Clicked [Edit] → Buttons disappeared → Unclear if bot was listening
+**After**: Click [Edit] → Buttons disappear → Receive message: **"✍️ I am listening. Please type the new response below:"**
+
+### 2. Service Bot Blacklist
+**Before**: Bot processed messages from Telegram (777000), BotFather, etc.
+**After**: Total block with log: `[BLACKLIST] ⛔ BLOCKED 'Telegram' (ID: 777000) - ABORT`
+
+### 3. Owner Silence Filter
+**Before**: Bot generated drafts even when you (ID: 8040716622) already replied
+**After**: Priority check → If you were last speaker → `[OWNER SILENCE] Confidence: 0% - SKIP`
+
+### 4. Excel Export
+**Before**: Showed 0% confidence scores (failed to parse Ukrainian text)
+**After**: Correctly parses `ВПЕВНЕНІСТЬ ШІ: 98%` → Shows real 98% scores in Excel
+
+### 5. Button Stability
+**Before**: Potential AttributeError crashes on button clicks
+**After**: All handlers verified using correct `await event.get_message()` pattern
+
+---
+
+## 📋 Blacklisted IDs (No Processing)
+
+```
+777000      → Telegram Service Notifications
+93372553    → BotFather
+8559587930  → AIBI_Secretary_Bot (our own bot)
+52504489    → User Info / Get ID / idbot
+8244511048  → Send_Message_telegram bot
+```
+
+**Action**: ABORT immediately (no AI, no Trello, no drafts)
+
+---
+
+## 🔄 Processing Order (Priority)
+
+1. **BLACKLIST** → Is chat_id a service bot? → BLOCK
+2. **OWNER SILENCE** → Did I (8040716622) reply last? → SKIP (Confidence: 0%)
+3. **FILTERS** → Empty text? Group chat? Self-chat? → SKIP
+4. **PROCESSING** → AI analysis, drafts, Trello, calendar
+
+---
+
+## 🧪 Quick Test
 
 ```bash
-# 1. Install dependencies
-pip install -r requirements.txt
-
-# 2. Configure .env (if needed)
-# Set FLASK_SECRET_KEY, TG_API_ID, TG_API_HASH, AI_API_KEY
-
-# 3. Start server
+# 1. Restart server
 python main.py
 
-# 4. Open browser
-# http://localhost:8080/
+# 2. Send /check command in Telegram
+# Watch logs for:
+[BLACKLIST] BLOCKED 'Telegram' (ID: 777000)
+[OWNER SILENCE] Confidence: 0% - SKIP
+
+# 3. Trigger a draft and click [Edit]
+# You should receive:
+"✍️ I am listening. Please type the new response below:"
+
+# 4. Run Excel export
+# Check logs for:
+[EXCEL] Extracted confidence 98% from Jane_Smith
 ```
 
 ---
 
-## Main URLs
+## 📊 Expected Logs
 
-| URL | Purpose | Auth Required |
-|-----|---------|---------------|
-| `http://localhost:8080/` | Dashboard (main UI) | Session |
-| `http://localhost:8080/auth` | Telegram login | None |
-| `http://localhost:8080/settings` | Preferences | Session |
-| `http://localhost:8080/force_run` | Batch analysis | None |
-
----
-
-## API Quick Reference
-
-### Get Chat List (Cost-Free)
-```bash
-curl "http://localhost:8080/api/chats?hours=24"
+### Service Bot Blocked:
+```
+[BLACKLIST] ⛔ BLOCKED 'Telegram' (ID: 777000)
+[BLACKLIST] Reason: Service bot/system chat
+[BLACKLIST] Action: ABORT (no AI analysis, no Trello, no drafts)
 ```
 
-**Response:**
-```json
-{
-  "chats": [
-    {
-      "chat_id": 12345,
-      "chat_title": "Chat Name",
-      "message_count": 5,
-      "last_message_date": "2026-01-31T15:30:00"
-    }
-  ],
-  "total_chats": 1
-}
+### Owner Already Replied:
+```
+[OWNER SILENCE] 🔇 Chat: 'John Doe' (ID: 526791303)
+[OWNER SILENCE] Last speaker: ME (Owner ID: 8040716622)
+[OWNER SILENCE] Confidence: 0% - I already replied
+[OWNER SILENCE] Action: SKIP (no AI, no drafts, no processing)
+```
+
+### Normal Processing:
+```
+[PROCESS START] Chat: 'Jane Smith' (ID: 381239241)
+[MULTI-MESSAGE] Found 2 unanswered client messages
+[STYLE ANALYSIS] Found 5 owner messages for style mimicry
+[AI ANALYSIS] Starting analysis... Confidence: 87%
 ```
 
 ---
 
-### Analyze Single Chat
-```bash
-curl -X POST http://localhost:8080/api/analyze \
-  -H "Content-Type: application/json" \
-  -d '{
-    "chat_id": 12345,
-    "start_date": "2026-01-31T00:00:00Z",
-    "end_date": "2026-02-01T23:59:59Z"
-  }'
-```
+## 🔧 Files Modified
 
-**Response:**
-```json
-{
-  "chat_id": 12345,
-  "report": "Analysis text...",
-  "confidence": 85,
-  "from_cache": false
-}
-```
+- `draft_bot.py` → [Edit] button confirmation message
+- `main.py` → Blacklist + Owner silence filter
+- `excel_module.py` → Enhanced parsing + verbose logging
 
 ---
 
-### Check Auth Status
-```bash
-curl http://localhost:8080/api/auth/status
-```
+## ✅ All Done
 
----
-
-### Toggle Scheduler
-```bash
-# Enable (optional auto-analysis every 20 min)
-curl -X POST http://localhost:8080/api/scheduler/toggle \
-  -H "Content-Type: application/json" \
-  -d '{"enabled": true}'
-
-# Disable (manual mode only)
-curl -X POST http://localhost:8080/api/scheduler/toggle \
-  -H "Content-Type: application/json" \
-  -d '{"enabled": false}'
-```
-
----
-
-## File Locations
-
-```
-Configuration:
-  .env                           ← Environment variables
-  .aibi_preferences.json         ← User preferences
-
-Cache:
-  analysis_cache/                ← Cached analysis results (auto-created)
-
-Logs:
-  Console output from python main.py
-
-Templates:
-  templates/                     ← HTML files
-  static/                        ← CSS, JS, images
-```
-
----
-
-## Environment Variables
-
-### Required
-```env
-TG_API_ID=your_api_id
-TG_API_HASH=your_api_hash
-AI_API_KEY=your_ai_key
-```
-
-### Optional (With Defaults)
-```env
-FLASK_SECRET_KEY=<auto-generated>
-AUTO_SCHEDULER=false
-DEFAULT_DATE_HOURS=24
-ANALYSIS_CACHE_TTL_HOURS=1
-```
-
----
-
-## Common Tasks
-
-### Analyze a Specific Chat
-1. Visit `http://localhost:8080/`
-2. Select date range (top of page)
-3. Click "Analyze" on desired chat
-4. View results below
-
-### Change Default Date Range
-1. Visit `http://localhost:8080/settings`
-2. Change "Default Time Range"
-3. Preference saved automatically
-
-### Enable Auto-Analysis (Optional)
-1. Visit `http://localhost:8080/settings`
-2. Toggle "Auto-Scheduler" on
-3. System will analyze all chats every 20 minutes
-
-### Authenticate with Telegram
-1. Visit `http://localhost:8080/auth`
-2. Enter phone: `+1 (555) 123-4567`
-3. Enter code from Telegram app
-4. Session file created automatically
-
-### Clear Cache
-Delete files in `analysis_cache/` folder or call:
-```bash
-# In Python console
-from web.session_manager import AnalysisCache
-cache = AnalysisCache()
-cache.clear()
-```
-
----
-
-## Troubleshooting
-
-### "ModuleNotFoundError: No module named 'web'"
-→ Check that `web/` directory exists in project root
-
-### "Telegram auth not initialized"
-→ Verify TG_API_ID and TG_API_HASH in .env
-
-### "Analysis fails with 'Chat not found'"
-→ Chat must have been listed in `/api/chats` endpoint first
-
-### "Cache not working"
-→ Check `analysis_cache/` directory exists and is writable
-
-### "Port 8080 already in use"
-```bash
-# Find process
-netstat -ano | findstr :8080
-
-# Kill it
-taskkill /PID <PID> /F
-```
-
-### "JavaScript errors in browser console"
-→ Check browser F12 → Console tab for errors
-→ Verify all files in `static/` directory exist
-→ Clear browser cache and reload
-
----
-
-## Key Metrics
-
-| Metric | Value |
-|--------|-------|
-| Cost Reduction | 99.5% |
-| API Calls/Day Before | 1,080 |
-| API Calls/Day After | ~5-50 |
-| Monthly Savings | $3.09/user |
-| Chat Loading Time | <1s |
-| Analysis Time | 5-30s |
-| Cached Response | <100ms |
-| Cache TTL | 1 hour |
-
----
-
-## File Structure
-
-```
-Project Root
-├── web/                        New web UI package
-│   ├── __init__.py
-│   ├── routes.py              ← 7 API endpoints
-│   ├── session_manager.py     ← Cache + prefs
-│   └── telegram_auth.py       ← Web auth
-│
-├── templates/                 New HTML templates
-│   ├── base.html
-│   ├── dashboard.html         ← Main UI
-│   ├── auth.html              ← Login page
-│   └── settings.html          ← Preferences
-│
-├── static/                    New frontend assets
-│   ├── css/main.css
-│   └── js/
-│       ├── api.js
-│       ├── app.js
-│       └── datefilter.js
-│
-├── analysis_cache/            Cache (auto-created)
-├── main.py                    MODIFIED
-├── telegram_client.py         MODIFIED
-├── utils.py                   MODIFIED
-├── .env                       MODIFIED
-└── requirements.txt
-```
-
----
-
-## API Summary
-
-```
-GET  /api/chats
-     Get list of chats (cost-free)
-
-POST /api/analyze
-     Analyze specific chat (on-demand, costs tokens)
-
-GET  /api/auth/status
-     Check if authenticated
-
-POST /api/auth/phone
-     Send verification code
-
-POST /api/auth/verify
-     Verify code and create session
-
-GET  /api/scheduler/status
-     Get scheduler enabled/running status
-
-POST /api/scheduler/toggle
-     Enable or disable auto-scheduler
-```
-
----
-
-## Documentation Files
-
-- `REFACTORING_GUIDE.md` - Complete guide (detailed)
-- `WEB_UI_SETUP.md` - Setup instructions (practical)
-- `IMPLEMENTATION_SUMMARY.md` - Overview (strategic)
-- `CHANGES_MADE.md` - Detailed changes (technical)
-- `QUICK_REFERENCE.md` - This file (quick lookup)
-
----
-
-## Support
-
-For issues:
-1. Check `.env` configuration
-2. Review console output for errors
-3. Check browser console (F12)
-4. See TROUBLESHOOTING section above
-5. Review relevant documentation file
-6. Check GitHub issues if deployed from repo
-
----
-
-**Version:** 1.0
-**Status:** Production Ready
-**Last Updated:** February 1, 2026
+Ready to test! The bot now intelligently filters service bots, respects your replies, provides clear UX feedback, and exports accurate statistics.

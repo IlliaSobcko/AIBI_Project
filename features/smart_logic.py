@@ -447,35 +447,50 @@ class SmartDecisionEngine:
         - Trello: 10% (task context)
         - Prices: 10% (business rules)
 
-        RULE: If Calendar unavailable/errored, redistribute its 20% weight back to AI.
+        RULE: If Calendar/Trello unavailable/errored, redistribute weight back to AI.
         This prevents bot from staying silent when a third-party tool fails.
         """
         # Check if calendar has error or is unavailable
         calendar_score = scores.get("calendar", 50)
         calendar_error = (
             calendar_score == 50 and  # Default neutral score indicates error
-            # AND calendar was supposed to be available but failed
             self.dsm.calendar is not None  # We have a calendar configured
         )
 
+        # Check if trello has error or is unavailable
+        trello_score = scores.get("trello", 50)
+        trello_error = (
+            trello_score == 50 and  # Default neutral score indicates error
+            self.dsm.trello is not None  # We have a trello configured
+        )
+
+        # Calculate adjusted weights based on failures
+        adjusted_ai_weight = self.ai_weight
+        calendar_weight = self.calendar_weight
+        trello_weight = self.trello_weight
+
         if calendar_error:
-            # Calendar failed - REDISTRIBUTE its 20% weight back to AI
-            print(f"[SMART_LOGIC] WARNING: Calendar unavailable - redistributing 20% weight to AI")
-            adjusted_ai_weight = self.ai_weight + self.calendar_weight  # 0.60 + 0.20 = 0.80
-            final = (
-                scores.get("ai", 0) * adjusted_ai_weight +
-                scores.get("trello", 50) * self.trello_weight +
-                scores.get("price_list", 50) * self.price_weight
-            )
-            print(f"[SMART_LOGIC] Weight adjustment: AI={adjusted_ai_weight} (was {self.ai_weight})")
-        else:
-            # Calendar is working normally - use standard weights
-            final = (
-                scores.get("ai", 0) * self.ai_weight +
-                calendar_score * self.calendar_weight +
-                scores.get("trello", 50) * self.trello_weight +
-                scores.get("price_list", 50) * self.price_weight
-            )
+            # Calendar failed - redistribute its 20% weight to AI
+            adjusted_ai_weight += self.calendar_weight
+            calendar_weight = 0
+            print(f"[SMART_LOGIC] WARNING: Calendar unavailable - redistributing 20% to AI")
+
+        if trello_error:
+            # Trello failed - redistribute its 10% weight to AI
+            adjusted_ai_weight += self.trello_weight
+            trello_weight = 0
+            print(f"[SMART_LOGIC] WARNING: Trello unavailable - redistributing 10% to AI")
+
+        if calendar_error or trello_error:
+            print(f"[SMART_LOGIC] Weight adjustment: AI={adjusted_ai_weight:.2f} (was {self.ai_weight})")
+
+        # Calculate final score with adjusted weights
+        final = (
+            scores.get("ai", 0) * adjusted_ai_weight +
+            calendar_score * calendar_weight +
+            trello_score * trello_weight +
+            scores.get("price_list", 50) * self.price_weight
+        )
 
         return int(final)
 

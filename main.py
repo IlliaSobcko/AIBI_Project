@@ -38,6 +38,7 @@ class BotRegistry:
         self.bot = None
         self.event_loop = None
         self.lock = threading.Lock()
+        self.messages = {}  # {chat_id: [messages]}
 
     @classmethod
     def get_instance(cls):
@@ -56,6 +57,11 @@ class BotRegistry:
         with self.lock:
             return self.bot
 
+    def get_draft_bot(self):
+        """Alias for get_bot() for compatibility"""
+        with self.lock:
+            return self.bot
+
     def get_event_loop(self):
         with self.lock:
             return self.event_loop
@@ -63,6 +69,35 @@ class BotRegistry:
     def has_bot(self):
         with self.lock:
             return self.bot is not None
+
+    def add_message(self, chat_id: int, message: dict):
+        """Add message from listener to registry (thread-safe)"""
+        with self.lock:
+            if chat_id not in self.messages:
+                self.messages[chat_id] = []
+            # Keep last 100 messages per chat
+            self.messages[chat_id].append(message)
+            if len(self.messages[chat_id]) > 100:
+                self.messages[chat_id].pop(0)
+
+    def get_messages(self, chat_id: int = None, limit: int = 20) -> dict:
+        """Get messages from registry (thread-safe)"""
+        with self.lock:
+            if chat_id is None:
+                # Return all messages
+                result = {}
+                for cid, msgs in self.messages.items():
+                    result[cid] = msgs[-limit:] if len(msgs) > limit else msgs
+                return result
+            else:
+                # Return messages from specific chat
+                msgs = self.messages.get(chat_id, [])
+                return {chat_id: msgs[-limit:] if len(msgs) > limit else msgs}
+
+    def clear_messages(self):
+        """Clear all messages (thread-safe)"""
+        with self.lock:
+            self.messages = {}
 
 # Global instances
 DRAFT_BOT = None
@@ -145,11 +180,14 @@ def start_draft_bot_background():
 
     def run_bot():
         """Run bot in background thread with its own event loop - NEVER BLOCK THE LOOP"""
+        print("[DRAFT BOT] [DEBUG] run_bot() function entered")
         loop = None
         try:
+            print("[DRAFT BOT] [DEBUG] Creating event loop...")
             # Create new event loop for this thread
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
+            print("[DRAFT BOT] [DEBUG] Event loop created successfully")
 
             # Set loop to not close on garbage collection
             loop.set_debug(False)
@@ -177,11 +215,60 @@ def start_draft_bot_background():
             global DRAFT_BOT, BOT_EVENT_LOOP
             DRAFT_BOT = bot
             BOT_EVENT_LOOP = loop
+            print(f"[DRAFT BOT] [REGISTRY] Bot registered in BOT_REGISTRY: {BOT_REGISTRY.get_bot() is not None}")
+            print(f"[DRAFT BOT] [REGISTRY] DRAFT_BOT global set: {DRAFT_BOT is not None}")
 
-            # Start the bot
-            success = loop.run_until_complete(bot.start())
+            # CRITICAL FIX: Create startup task with timeout
+            # Don't block - just attempt startup and move on
+            print("[DRAFT BOT] Attempting connection with 200-second timeout...")
+
+            async def startup_with_timeout():
+                try:
+                    # Create a task for bot startup
+                    startup_task = asyncio.create_task(bot.start())
+                    # Wait with EXTENDED timeout (120s connect + 60s auth + buffer)
+                    result = await asyncio.wait_for(startup_task, timeout=200.0)
+
+                    # Send test notification after successful connection
+                    if result:
+                        try:
+                            await bot.tg_service.send_message(
+                                recipient_id=int(owner_id),
+                                text="🟢 SYSTEM: Draft Bot is now connected to Core Logic!"
+                            )
+                            print(f"[DRAFT BOT] [OK] Test notification sent to owner ({owner_id})")
+                        except Exception as e:
+                            print(f"[DRAFT BOT] [WARN] Could not send test notification: {e}")
+
+                    return result
+                except asyncio.TimeoutError:
+                    print("[DRAFT BOT] [CRITICAL] Bot initialization timed out after 200 seconds")
+                    print("[DRAFT BOT] [INFO] Cleaning up session files and continuing...")
+                    # Auto-delete session files on timeout
+                    from pathlib import Path
+                    session_files = [
+                        "draft_bot_service.session",
+                        "draft_bot_service.session-journal",
+                        "draft_bot_service.db",
+                        "draft_bot_service-journal",
+                    ]
+                    for session_file in session_files:
+                        try:
+                            path = Path(session_file)
+                            if path.exists():
+                                path.unlink()
+                                print(f"[DRAFT BOT] Cleaned: {session_file}")
+                        except Exception as e:
+                            print(f"[DRAFT BOT] [ERROR] Failed to clean {session_file}: {e}")
+                    return False
+                except Exception as e:
+                    print(f"[DRAFT BOT] [ERROR] Bot startup failed: {type(e).__name__}: {e}")
+                    return False
+
+            success = loop.run_until_complete(startup_with_timeout())
 
             if success:
+                print("[TG_SERVICE] Connection successful!")
                 print("[DRAFT BOT] [OK] Bot listener is ONLINE and listening for messages...")
                 print("[DRAFT BOT] [OK] Event loop running continuously in background thread")
                 print("[DRAFT BOT] [OK] Flask web server will NOT block bot messages")
@@ -189,7 +276,8 @@ def start_draft_bot_background():
                 # This will NOT block Flask because it's in a separate thread
                 loop.run_forever()
             else:
-                print("[DRAFT BOT] [ERROR] Bot failed to start - check credentials")
+                print("[DRAFT BOT] [GRACEFUL] Bot connection failed, but Flask will continue operating")
+                print("[DRAFT BOT] [GRACEFUL] Users can still access Web UI without bot functionality")
 
         except asyncio.CancelledError:
             print("[DRAFT BOT] [INFO] Bot loop cancelled (graceful shutdown)")
@@ -231,7 +319,13 @@ def get_combined_instructions():
 
 
 # --- ОСНОВНИЙ ЦИКЛ АНАЛІЗУ ---
-async def run_core_logic():
+async def run_core_logic(draft_bot_param=None):
+    """
+    Core bot logic with direct bot reference parameter.
+
+    Args:
+        draft_bot_param: DraftReviewBot instance passed directly (bypasses registry lookup)
+    """
     print(f"[{datetime.now()}] >>> Запуск циклу аналізу...")
     
     tg_cfg = TelegramConfig(
@@ -253,8 +347,10 @@ async def run_core_logic():
             me = await collector.client.get_me()
             print(f"[SESSION VERIFY] [OK] Authenticated as: {me.first_name}")
             print(f"[SESSION VERIFY] User ID: {me.id}")
-            print(f"[SESSION VERIFY] Is Bot: {me.is_bot}")
-            print(f"[SESSION VERIFY] Session Type: {'BOT' if me.is_bot else 'USERBOT'}")
+            # Fix: Check if is_bot attribute exists (User objects don't always have it)
+            is_bot = getattr(me, 'is_bot', getattr(me, 'bot', False))
+            print(f"[SESSION VERIFY] Is Bot: {is_bot}")
+            print(f"[SESSION VERIFY] Session Type: {'BOT' if is_bot else 'USERBOT'}")
         except Exception as e:
             print(f"[SESSION VERIFY] [ERROR] Failed to verify session: {e}")
             print(f"[SESSION VERIFY] Messages may not send correctly")
@@ -276,7 +372,9 @@ async def run_core_logic():
         # Збираємо історію за останні 7 днів (або скільке вказано в .env)
         days = int(os.getenv("DAYS", 7))
         print(f"[HISTORY] Collecting messages from last {days} days...")
-        histories = await collector.collect_history_last_days(dialogs, days)
+        # Get owner ID for sender tracking
+        owner_id = int(os.getenv("OWNER_TELEGRAM_ID", "0")) if os.getenv("OWNER_TELEGRAM_ID") else None
+        histories = await collector.collect_history_last_days(dialogs, days, owner_id=owner_id)
         print(f"[HISTORY] Collected {len(histories)} messages")
 
         # Ініціалізація Trello та Google Calendar (опціонально)
@@ -321,22 +419,72 @@ async def run_core_logic():
         auto_reply_threshold = int(os.getenv("AUTO_REPLY_CONFIDENCE", "85"))
         reply_generator = AutoReplyGenerator(ai_key)
 
-        # Use global draft bot if available (started at Flask startup)
-        draft_bot = DRAFT_BOT
+        # FIX: Use passed bot parameter first (direct reference - bypasses registry)
+        draft_bot = draft_bot_param
+
+        if draft_bot:
+            print("[DRAFT BOT] [OK] Using bot passed by reference (direct parameter)")
+        else:
+            # Fallback to global/registry lookup
+            draft_bot = DRAFT_BOT
+            print(f"[DRAFT BOT] [DEBUG] Fallback DRAFT_BOT check: {draft_bot is not None}")
+
+            if not draft_bot:
+                print("[DRAFT BOT] [CHECK] Checking BOT_REGISTRY for bot instance...")
+                draft_bot = BOT_REGISTRY.get_draft_bot()
+                print(f"[DRAFT BOT] [DEBUG] BOT_REGISTRY.get_draft_bot() returned: {draft_bot is not None}")
+
         if draft_bot:
             print("[DRAFT BOT] [OK] Using persistent background bot for draft delivery")
         else:
             print("[WARNING] Draft bot not available - drafts will NOT be sent")
 
+        # === BLACKLIST: Service bots that must be totally blocked ===
+        SERVICE_BOT_BLACKLIST = {
+            777000,      # Telegram Service Notifications
+            93372553,    # BotFather
+            8559587930,  # AIBI_Secretary_Bot (our own bot)
+            52504489,    # User Info / Get ID / idbot
+            8244511048   # Send_Message_telegram bot
+        }
+
         count = 0
         for h in histories:
+            # === TOTAL BLOCK: Service bots and system chats (PRIORITY #1) ===
+            if h.chat_id in SERVICE_BOT_BLACKLIST:
+                print(f"\n[BLACKLIST] ⛔ BLOCKED '{h.chat_title}' (ID: {h.chat_id})")
+                print(f"[BLACKLIST] Reason: Service bot/system chat")
+                print(f"[BLACKLIST] Action: ABORT (no AI analysis, no Trello, no drafts)\n")
+                continue
+
             if not h.text.strip():
                 print(f"[SKIP] Chat '{h.chat_title}' has empty text")
+                continue
+
+            # === STRICT FILTER: Only process private chats with real users ===
+            if h.chat_type != "user":
+                print(f"[SKIP] Chat '{h.chat_title}' - not a private user chat (type: {h.chat_type})")
+                continue
+
+            # Skip if this is the owner's own chat (talking to self)
+            if h.chat_id == owner_id:
+                print(f"[SKIP] Chat '{h.chat_title}' - owner's own chat (ID: {h.chat_id})")
+                continue
+
+            # === PRIORITY FILTER: Owner silence check (PRIORITY #2 - BEFORE any processing) ===
+            if h.is_owner_last_speaker():
+                print(f"\n{'='*80}")
+                print(f"[OWNER SILENCE] 🔇 Chat: '{h.chat_title}' (ID: {h.chat_id})")
+                print(f"[OWNER SILENCE] Last speaker: ME (Owner ID: {owner_id})")
+                print(f"[OWNER SILENCE] Confidence: 0% - I already replied")
+                print(f"[OWNER SILENCE] Action: SKIP (no AI, no drafts, no processing)")
+                print(f"{'='*80}\n")
                 continue
 
             print(f"\n{'='*80}")
             print(f"[PROCESS START] Chat: '{h.chat_title}' (ID: {h.chat_id})")
             print(f"[PROCESS START] Message length: {len(h.text)} chars")
+            print(f"[PROCESS START] Chat type: {h.chat_type}")
             print(f"{'='*80}")
 
             # === FORCED DEBUG OUTPUT ===
@@ -348,6 +496,21 @@ async def run_core_logic():
             print(f"[INPUT] Message received: '{message_preview}...'")
             print(f"[INPUT] Chat: {h.chat_title} (ID: {h.chat_id})")
 
+            # === MULTI-MESSAGE CHECK: Get unanswered client messages ===
+            unanswered_messages = h.get_unanswered_client_messages()
+            if unanswered_messages:
+                print(f"[MULTI-MESSAGE] Found {len(unanswered_messages)} unanswered client messages")
+                # Group them for context
+                grouped_text = "\n".join([f"[{msg.get('date')}] {msg.get('text')}" for msg in unanswered_messages])
+                print(f"[MULTI-MESSAGE] Grouped messages:\n{grouped_text[:200]}...")
+
+            # === STYLE MIMICRY: Extract owner's communication style ===
+            owner_messages = h.get_owner_messages_for_style()
+            if owner_messages:
+                print(f"[STYLE ANALYSIS] Found {len(owner_messages)} owner messages for style mimicry")
+                style_examples = "\n".join([f"- {msg.get('text')[:100]}" for msg in owner_messages[:5]])
+                print(f"[STYLE ANALYSIS] Owner's recent messages:\n{style_examples}")
+
             # MESSAGE ACCUMULATION: Add to accumulator (7 second window)
             message_accumulator.add_message(h)
 
@@ -357,9 +520,52 @@ async def run_core_logic():
             if not accumulated_h:
                 accumulated_h = h
 
-            # Аналіз через "Консиліум"
+            # === AI SELF-LEARNING: Inject relevant examples ===
+            enhanced_instructions = instructions
+            try:
+                from knowledge_base_storage import get_knowledge_base
+                kb_storage = get_knowledge_base()
+
+                # Get relevant examples for this client
+                relevant_examples = kb_storage.get_relevant_examples(
+                    client_question=accumulated_h.text,
+                    chat_title=accumulated_h.chat_title,
+                    limit=5
+                )
+
+                if relevant_examples:
+                    print(f"[AI LEARNING] Injecting {len(relevant_examples)} relevant examples into AI prompt")
+
+                    # Build examples section
+                    examples_section = "\n\n" + "="*80 + "\n"
+                    examples_section += "SUCCESSFUL REPLY PATTERNS (Learn from these approved examples):\n"
+                    examples_section += "="*80 + "\n"
+
+                    for i, example in enumerate(relevant_examples, 1):
+                        examples_section += f"\nExample {i}:\n"
+                        examples_section += f"Client: {example['chat_title']}\n"
+                        examples_section += f"Question: {example['client_question'][:200]}\n"
+                        examples_section += f"Approved Response: {example['approved_response'][:300]}\n"
+                        examples_section += f"(Confidence: {example['confidence']}%, Used: {example.get('used_count', 0)} times)\n"
+                        examples_section += "-"*80 + "\n"
+
+                    examples_section += "\nMATCH THE TONE, STYLE, AND APPROACH FROM THESE EXAMPLES.\n"
+                    examples_section += "="*80 + "\n"
+
+                    # Inject examples into instructions
+                    enhanced_instructions = instructions + examples_section
+                    print(f"[AI LEARNING] Enhanced instructions with {len(relevant_examples)} examples")
+                else:
+                    print(f"[AI LEARNING] No relevant examples found yet")
+
+            except Exception as e:
+                print(f"[AI LEARNING] [WARN] Failed to inject examples: {e}")
+                # Fallback to original instructions
+                enhanced_instructions = instructions
+
+            # Аналіз через "Консиліум" with enhanced instructions
             print(f"[AI ANALYSIS] Starting analysis for '{h.chat_title}'...")
-            result = await analyzer.analyze_chat(instructions, accumulated_h)
+            result = await analyzer.analyze_chat(enhanced_instructions, accumulated_h)
             print(f"[AI ANALYSIS] Completed. Confidence: {result['confidence']}%")
 
             # Збереження результату
@@ -643,47 +849,96 @@ async def run_core_logic():
 
 # --- WEB API FUNCTIONS (CALLED BY FLASK ROUTES) ---
 
-async def fetch_chats_only(limit: int = 50) -> list:
+async def fetch_chats_only(limit: int = 50, hours_ago: int = 24) -> list:
     """
-    Fetch list of chats from Telegram (used by web UI)
+    DIRECT INTEGRATION: Fetch dialogs from Telegram using aibi_session
+
+    This function directly calls client.get_dialogs() and returns ALL recent dialogs
+    without message counting overhead. Fast and simple.
+
+    Args:
+        limit: Maximum number of dialogs to return (default 50)
+        hours_ago: Unused - kept for API compatibility
 
     Returns:
-        List of ChatInfo objects with proper data types and structure
+        List of ChatInfo objects from recent dialogs
     """
     try:
-        print(f"[FETCH CHATS] Starting fetch (limit={limit})...")
+        from telethon import TelegramClient
+        from datetime import datetime
 
-        cfg = TelegramConfig(
-            api_id=int(os.getenv("TG_API_ID")),
-            api_hash=os.getenv("TG_API_HASH"),
-            session_name=os.getenv("TG_SESSION_NAME", "collector_session")
-        )
+        session_name = "aibi_session"  # HARDCODED - use authenticated session
+        api_id = int(os.getenv("TG_API_ID"))
+        api_hash = os.getenv("TG_API_HASH")
 
-        async with TelegramCollector(cfg) as collector:
-            print("[OK] Connected to Telegram API")
+        print(f"[TELEGRAM] Connecting with {session_name}.session...")
+        print(f"[TELEGRAM] API ID: {api_id}")
 
-            dialogs = await collector.list_dialogs(limit=limit)
+        # Create client directly with aibi_session
+        client = TelegramClient(session_name, api_id, api_hash)
+        await client.connect()
 
-            # Convert Telethon objects to ChatInfo wrapper class
-            chats = []
-            for d in dialogs:
-                try:
-                    chat_info = ChatInfo(
-                        chat_id=int(d.id),  # Ensure int type
-                        name=str(d.name or "Pryvate chat"),
-                        unread_count=int(getattr(d, 'unread_count', 0)),
-                        chat_type="user" if hasattr(d, 'is_user') and d.is_user else "group"
-                    )
-                    chats.append(chat_info)
-                except Exception as e:
-                    print(f"[WARNING] Failed to process chat: {e}")
-                    continue
+        # Check if authenticated
+        if not await client.is_user_authorized():
+            print(f"[TELEGRAM] ERROR: Session not authorized. Run manual_phone_auth.py first!")
+            await client.disconnect()
+            return []
 
-            print(f"[SUCCESS] Fetched {len(chats)} chats")
-            return chats
+        print(f"[TELEGRAM] Successfully connected with {session_name}.session")
+
+        # Get dialogs directly
+        print(f"[TELEGRAM] Fetching dialogs (limit={limit})...")
+        dialogs = await client.get_dialogs(limit=limit)
+        print(f"[TELEGRAM] Found {len(dialogs)} dialogs")
+
+        # Convert to ChatInfo format
+        chats = []
+        for dialog in dialogs:
+            try:
+                # Get dialog entity
+                entity = dialog.entity
+
+                # Determine chat type
+                from telethon.tl.types import User, Chat, Channel
+                if isinstance(entity, User):
+                    chat_type = "user"
+                elif isinstance(entity, (Chat, Channel)):
+                    chat_type = "group"
+                else:
+                    chat_type = "unknown"
+
+                # Get last message date
+                last_msg_date = None
+                if dialog.message and dialog.message.date:
+                    last_msg_date = dialog.message.date
+
+                # Create ChatInfo
+                chat_info = ChatInfo(
+                    chat_id=int(dialog.id),
+                    name=str(dialog.name or "Unknown"),
+                    unread_count=int(dialog.unread_count),
+                    message_count=int(dialog.unread_count),  # Use unread as proxy
+                    last_message_date=last_msg_date,
+                    has_unread=dialog.unread_count > 0,
+                    chat_type=chat_type
+                )
+                chats.append(chat_info)
+
+                # Log each chat
+                last_msg = last_msg_date.strftime("%Y-%m-%d %H:%M:%S") if last_msg_date else "N/A"
+                print(f"[TELEGRAM]   - {dialog.name} (ID: {dialog.id}, unread: {dialog.unread_count}, last: {last_msg})")
+
+            except Exception as e:
+                print(f"[TELEGRAM] Warning: Failed to process dialog: {e}")
+                continue
+
+        await client.disconnect()
+        print(f"[TELEGRAM] SUCCESS: Returning {len(chats)} chats")
+        return chats
 
     except Exception as e:
-        print(f"[CRITICAL] Error fetching chats: {str(e)}")
+        print(f"[TELEGRAM] CRITICAL ERROR: {str(e)}")
+        import traceback
         traceback.print_exc()
         return []
 
@@ -792,12 +1047,33 @@ async def analyze_single_chat(chat_id: int, start_date: datetime, end_date: date
 def scheduled_task():
     """Run scheduled task every 20 minutes with auto-recovery"""
     try:
-        asyncio.run(run_core_logic())
+        # Pass global bot instance to scheduled analysis
+        asyncio.run(run_core_logic(draft_bot_param=DRAFT_BOT))
     except Exception as e:
         print(f"[SCHEDULER ERROR] Task execution failed: {type(e).__name__}: {e}")
         print(f"[SCHEDULER ERROR] Full traceback:\n{traceback.format_exc()}")
         print("[SCHEDULER RECOVERY] Task will retry on next scheduled cycle (20 minutes)")
         # Scheduler will automatically retry on next cycle
+
+
+def weekly_knowledge_base_task():
+    """Weekly knowledge base analysis task"""
+    try:
+        from features.smart_enhancements import knowledge_base
+        from ai_client import ai_client
+        print("[KNOWLEDGE BASE] Starting weekly analysis...")
+
+        # Run async analysis
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        loop.run_until_complete(knowledge_base.weekly_analysis(ai_client))
+        loop.close()
+
+        print("[KNOWLEDGE BASE] Weekly analysis completed")
+    except Exception as e:
+        print(f"[KNOWLEDGE BASE ERROR] Weekly task failed: {type(e).__name__}: {e}")
+        print(f"[KNOWLEDGE BASE ERROR] Full traceback:\n{traceback.format_exc()}")
+
 
 # Make scheduler optional (disabled by default for manual mode)
 SCHEDULER_ENABLED = os.getenv("AUTO_SCHEDULER", "false").lower() == "true"
@@ -811,6 +1087,14 @@ if os.getenv("AUTO_ANALYSIS_ENABLED", "false").lower() == "true":
     print("[SCHEDULER] Auto-analysis enabled (every 20 minutes)")
 else:
     print("[SCHEDULER] Auto-analysis DISABLED (manual mode only)")
+
+# Add weekly knowledge base analysis (always enabled)
+scheduler.add_job(func=weekly_knowledge_base_task, trigger="cron", day_of_week="sun", hour=2)
+print("[SCHEDULER] Weekly knowledge base analysis scheduled (Sundays at 2:00 AM)")
+
+# Start scheduler if not already started
+if not scheduler.running:
+    scheduler.start()
 
 
 # --- BLUEPRINT REGISTRATION ---

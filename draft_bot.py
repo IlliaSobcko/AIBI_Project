@@ -7,12 +7,15 @@ FIXED: Proper entity fetching and event message handling.
 import os
 import asyncio
 import traceback
+from datetime import datetime
 from pathlib import Path
 from telethon import TelegramClient, events
 from telethon.tl.types import Message
 from telethon.tl.custom.button import Button
 from auto_reply import draft_system
 from telegram_service import TelegramService
+from features.smart_enhancements import AutoBookingManager
+from knowledge_base_storage import get_knowledge_base
 
 
 # ============================================================================
@@ -40,6 +43,7 @@ class DraftReviewBot:
             session_name="draft_bot_service"
         )
         self.waiting_for_edit = {}  # {chat_id: True} - waiting for edit
+        self.check_in_progress = False  # Prevent duplicate /check commands
         self.waiting_for_instructions = False  # NEW: Track instruction update state
         self.connection_attempts = 0
         self.max_connection_attempts = 3
@@ -61,10 +65,11 @@ class DraftReviewBot:
 
         # Register handlers
         self._register_button_handler()
+        self._register_command_handler()
         self._register_text_message_handler()
         self._register_new_message_handler()
 
-        print("[DRAFT BOT] Started - listening for button interactions AND new messages...")
+        print("[DRAFT BOT] Started - listening for commands, buttons, and new messages...")
 
         # Send startup notification to owner
         await self.send_startup_notification()
@@ -90,15 +95,15 @@ class DraftReviewBot:
 [OK] Bot is now ONLINE and ready to receive commands
 
 Status:
-  • Bot API: Connected
-  • Token: Valid
-  • Owner ID: {self.owner_id}
-  • Restart Time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+  - Bot API: Connected
+  - Token: Valid
+  - Owner ID: {self.owner_id}
+  - Restart Time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
 
 Available Commands:
-  • /check → Manual analysis trigger
-  • /report → Analytics dashboard
-  • Звіт → Excel report export
+  - /check: Manual analysis trigger
+  - /report: Analytics dashboard
+  - Звіт: Excel report export
 
 --------------------
 System is ready to process drafts and commands.
@@ -124,14 +129,94 @@ System is ready to process drafts and commands.
 
     def _register_button_handler(self):
         """Register callback query handler for inline buttons"""
+        # FIX: CallbackQuery doesn't accept from_users parameter
+        # Instead, filter by sender_id inside the handler
         @self.client.on(events.CallbackQuery())
         async def button_handler(event):
             try:
+                # Security: Only process callbacks from owner
+                if event.sender_id != self.owner_id:
+                    print(f"[SECURITY] Ignoring callback from non-owner: {event.sender_id}")
+                    await event.answer("Unauthorized", alert=True)
+                    return
+
                 await self.handle_button_callback(event)
             except Exception as e:
                 print(f"[ERROR] Button handler exception: {type(e).__name__}: {e}")
                 try:
                     await event.answer(f"Error: {type(e).__name__}")
+                except:
+                    pass
+
+    def _register_command_handler(self):
+        """Register handler for bot commands (/export, /check)"""
+        @self.client.on(events.NewMessage(from_users=self.owner_id, pattern=r'^/'))
+        async def command_handler(event):
+            try:
+                command = event.message.text.strip().lower()
+                print(f"[COMMAND] Received command: {command}")
+
+                if command == '/check':
+                    # Prevent duplicate execution
+                    if self.check_in_progress:
+                        await event.reply("[WAIT] Analysis already in progress, please wait...")
+                        print("[DRAFT BOT] [CHECK] Ignoring duplicate command - analysis already running")
+                        return
+
+                    self.check_in_progress = True
+                    try:
+                        await event.reply("[OK] Manual analysis triggered via /check command")
+                        print("[DRAFT BOT] Manual /check command received from owner")
+                        print("[DRAFT BOT] Clearing any waiting states before analysis...")
+                        self.waiting_for_edit.clear()
+                        print(f"[DRAFT BOT] Waiting states cleared: {len(self.waiting_for_edit)} items removed")
+
+                        # Trigger analysis - pass bot instance directly
+                        from main import run_core_logic
+                        print("[DRAFT BOT] [CHECK] Starting run_core_logic() to reanalyze recent messages...")
+                        await run_core_logic(draft_bot_param=self)  # Pass bot by reference
+                        print("[DRAFT BOT] [CHECK] Analysis completed")
+                    finally:
+                        self.check_in_progress = False
+
+                elif command == '/export':
+                    await event.reply("[PROCESSING] Generating finance export... Please wait.")
+                    print("[FINANCE EXPORT] Command received from owner")
+
+                    # Generate finance report
+                    try:
+                        from features.smart_enhancements import finance_exporter
+                        from main import fetch_chats_only
+
+                        # Fetch recent chats
+                        chats = await fetch_chats_only(limit=100, hours_ago=168)  # Last week
+
+                        # Generate Excel report
+                        excel_path = finance_exporter.generate_excel_report(chats, [])
+
+                        if excel_path and os.path.exists(excel_path):
+                            await self.client.send_file(
+                                self.owner_id,
+                                excel_path,
+                                caption="[SUCCESS] Finance Export Report"
+                            )
+                            print(f"[FINANCE EXPORT] [SUCCESS] Report sent: {excel_path}")
+                        else:
+                            await event.reply("[ERROR] Failed to generate report")
+                            print("[FINANCE EXPORT] [ERROR] Excel file not created")
+
+                    except Exception as export_error:
+                        await event.reply(f"[ERROR] Export failed: {export_error}")
+                        print(f"[FINANCE EXPORT] [ERROR] {export_error}")
+                        print(f"[FINANCE EXPORT] Traceback:\n{traceback.format_exc()}")
+
+                else:
+                    print(f"[COMMAND] Unknown command: {command}")
+
+            except Exception as e:
+                print(f"[ERROR] Command handler exception: {type(e).__name__}: {e}")
+                try:
+                    await event.reply(f"[ERROR] {type(e).__name__}: {e}")
                 except:
                     pass
 
@@ -155,19 +240,86 @@ System is ready to process drafts and commands.
 
                 print(f"[DRAFT BOT] [NEW MESSAGE] From {sender_name} (ID: {event.sender_id}): {message_text[:100]}")
 
-                # Forward message notification to owner for awareness
+                # Store message in registry for Web UI display
+                try:
+                    from main import BOT_REGISTRY
+                    chat_id = event.chat_id if hasattr(event, 'chat_id') else event.sender_id
+                    message_data = {
+                        "message_id": event.id,
+                        "chat_id": chat_id,
+                        "sender_id": event.sender_id,
+                        "sender_name": sender_name,
+                        "text": message_text[:500],  # Store preview
+                        "date": event.date.isoformat() if hasattr(event, 'date') else datetime.now().isoformat()
+                    }
+                    BOT_REGISTRY.add_message(chat_id, message_data)
+                except Exception as e:
+                    print(f"[WARNING] Failed to store message in registry: {e}")
+
+                # INTERACTIVE MANAGER MODE: Generate AI draft and send with action buttons
                 if self.owner_id and event.sender_id != self.owner_id:
                     try:
-                        notification = f"[MSG] New message from {sender_name}:\n\n{message_text[:200]}"
-                        if len(message_text) > 200:
-                            notification += "..."
+                        # Generate AI draft using auto_reply system
+                        print(f"[DRAFT BOT] [AI DRAFT] Generating response for chat {event.sender_id}...")
 
+                        # Load business data and instructions
+                        business_data_path = Path("business_data.txt")
+                        instructions_path = Path("instructions.txt")
+
+                        business_data = ""
+                        instructions = ""
+
+                        if business_data_path.exists():
+                            business_data = business_data_path.read_text(encoding='utf-8')
+
+                        if instructions_path.exists():
+                            instructions = instructions_path.read_text(encoding='utf-8')
+
+                        # Generate AI draft
+                        try:
+                            draft_text = await draft_system.generate_reply(
+                                message_text=message_text,
+                                business_data=business_data,
+                                instructions=instructions,
+                                chat_title=sender_name
+                            )
+                            print(f"[DRAFT BOT] [AI DRAFT] Generated {len(draft_text)} chars")
+                        except Exception as draft_error:
+                            print(f"[DRAFT BOT] [AI DRAFT] Generation failed: {draft_error}")
+                            draft_text = "[AI draft generation failed - respond manually]"
+
+                        # Create notification with AI draft and interactive buttons
+                        notification = (
+                            f"NEW MESSAGE from {sender_name} (ID: {event.sender_id})\n\n"
+                            f"MESSAGE:\n{message_text[:300]}\n\n"
+                            f"AI DRAFT:\n{draft_text}\n\n"
+                            f"Choose action:"
+                        )
+
+                        # Create inline buttons for interactive management
+                        buttons = [
+                            [
+                                Button.inline("[OK] Send Response", f"send_{event.sender_id}"),
+                                Button.inline("[EDIT] Edit Draft", f"edit_{event.sender_id}"),
+                            ],
+                            [
+                                Button.inline("[X] Ignore", f"skip_{event.sender_id}"),
+                            ]
+                        ]
+
+                        # Send notification with buttons
                         await self.tg_service.send_message(
                             recipient_id=self.owner_id,
-                            text=notification
+                            text=notification,
+                            buttons=buttons
                         )
+
+                        print(f"[DRAFT BOT] [INTERACTIVE] Sent notification to owner with 3 action buttons")
+
                     except Exception as e:
-                        print(f"[WARNING] Failed to forward notification: {e}")
+                        print(f"[WARNING] Failed to send interactive notification: {e}")
+                        import traceback
+                        traceback.print_exc()
 
             except Exception as e:
                 print(f"[ERROR] New message handler exception: {type(e).__name__}: {e}")
@@ -179,7 +331,7 @@ System is ready to process drafts and commands.
             try:
                 # Only process messages from owner
                 if event.sender_id == self.owner_id:
-                    message = await event.get_message()
+                    message = event.message
                     message_text = message.text or ""
                     message_text_lower = message_text.strip().lower()
 
@@ -199,7 +351,7 @@ System is ready to process drafts and commands.
                         from main import run_core_logic
                         try:
                             print(f"[DRAFT BOT] [CHECK] Starting run_core_logic() to reanalyze recent messages...")
-                            result = await run_core_logic()
+                            result = await run_core_logic(draft_bot_param=self)  # Pass bot by reference
 
                             success_msg = f"""[OK] ANALYSIS COMPLETE
 
@@ -230,6 +382,55 @@ System is ready to process drafts and commands.
                             await event.reply(summary)
                         except Exception as e:
                             error_msg = f"[ERROR] Report generation failed: {type(e).__name__}: {str(e)}"
+                            print(f"[ERROR] {error_msg}")
+                            print(f"[ERROR] Full traceback:\n{traceback.format_exc()}")
+                            await event.reply(error_msg)
+
+                    # ================================================================
+                    # COMMAND: /generate_faq - AI Self-Learning Knowledge Base Update
+                    # ================================================================
+                    elif message_text_lower == "/generate_faq":
+                        print(f"[DRAFT BOT] /generate_faq command received from owner")
+                        await event.reply("📚 [AI LEARNING] Generating FAQ from successful reply patterns...")
+                        try:
+                            kb_storage = get_knowledge_base()
+
+                            # Get statistics
+                            stats = kb_storage.get_statistics()
+                            total_patterns = stats['total_patterns']
+
+                            if total_patterns == 0:
+                                await event.reply("⚠️ No successful patterns found yet!\n\nApprove some drafts first using the [Send] button, then try again.")
+                                return
+
+                            # Generate FAQ
+                            result = kb_storage.generate_faq("dynamic_instructions.txt")
+
+                            if result['success']:
+                                success_msg = f"""✅ **Knowledge Base Updated!**
+
+📊 **Statistics:**
+• Total Successful Cases: {result['total_patterns']}
+• Topics Identified: {result['topics_identified']}
+• File: dynamic_instructions.txt
+
+🎯 **Impact:**
+The AI will now use these {result['total_patterns']} successful patterns to:
+✓ Match your communication style
+✓ Provide consistent responses
+✓ Learn from approved replies
+
+📈 **Self-Learning Active:**
+Every time you click [Send], the AI learns and improves!
+"""
+                                await event.reply(success_msg)
+                                print(f"[AI LEARNING] ✓ FAQ generated with {result['total_patterns']} patterns")
+                            else:
+                                error_msg = f"❌ Failed to generate FAQ: {result.get('error', 'Unknown error')}"
+                                await event.reply(error_msg)
+
+                        except Exception as e:
+                            error_msg = f"[ERROR] FAQ generation failed: {type(e).__name__}: {str(e)}"
                             print(f"[ERROR] {error_msg}")
                             print(f"[ERROR] Full traceback:\n{traceback.format_exc()}")
                             await event.reply(error_msg)
@@ -330,7 +531,7 @@ System is ready to process drafts and commands.
                             core_preview = current[:400] + "..." if len(current) > 400 else current
                             dynamic_preview = dynamic[:300] + "..." if len(dynamic) > 300 else dynamic
 
-                            response = f"""📋 **CURRENT INSTRUCTIONS**
+                            response = f"""[INFO] **CURRENT INSTRUCTIONS**
 
 **Core Instructions** ({stats['instructions_size']} chars):
 {core_preview}
@@ -358,7 +559,7 @@ Available Commands:
                         print(f"[DRAFT BOT] /update_instructions command received from owner")
                         self.waiting_for_instructions = True
 
-                        help_text = """📝 **INSTRUCTIONS UPDATE MODE**
+                        help_text = """[EDIT] **INSTRUCTIONS UPDATE MODE**
 
 Send your update in format:
   REPLACE: [new instructions text]
@@ -391,7 +592,7 @@ Note: Automatic backup will be created before changes.
                                 await event.reply("[ERROR] No backups available yet")
                                 return
 
-                            response = "📦 **AVAILABLE BACKUPS** (Most recent first)\n\n"
+                            response = "[BACKUP] **AVAILABLE BACKUPS** (Most recent first)\n\n"
                             for i, backup in enumerate(backups, 1):
                                 response += f"{i}. {backup}\n"
 
@@ -524,7 +725,7 @@ Note: Automatic backup will be created before changes.
 
         try:
             # Parse button data: "send_12345", "edit_12345", "skip_12345"
-            action, chat_id_str = data.split("_")
+            action, chat_id_str = data.split("_", 1)  # Split on first underscore only
             chat_id = int(chat_id_str)
 
             print(f"[DRAFT BOT] Button clicked: {action} for chat {chat_id} by owner {event.sender_id}")
@@ -534,19 +735,32 @@ Note: Automatic backup will be created before changes.
                 await event.answer("Sending message...", alert=False)
                 await self.approve_and_send(chat_id, event)
 
+            elif action == "confirm":
+                # Handle confirmation of edited draft
+                await event.answer("Sending edited message...", alert=False)
+                await self.send_confirmed_edit(chat_id, event)
+
             elif action == "edit":
                 # Show feedback and mark waiting
                 await event.answer("Reply with the edited message", alert=False)
                 self.waiting_for_edit[chat_id] = True
                 # Update button message to show we're waiting
                 try:
-                    # CORRECT: Use (await event.get_message()).text
+                    # For CallbackQuery, fetch message asynchronously
                     message = await event.get_message()
                     message_text = message.text or ""
                     await event.edit(
                         message_text + "\n\n[WAITING FOR YOUR EDIT...]",
                         buttons=None
                     )
+
+                    # Send clear confirmation message
+                    await self.tg_service.send_message(
+                        self.owner_id,
+                        "✍️ **I am listening. Please type the new response below:**\n\nSend your edited message and I'll forward it to the client.",
+                        buttons=None
+                    )
+                    print(f"[DRAFT BOT] Edit confirmation message sent to owner")
                 except Exception as e:
                     print(f"[ERROR] Failed to edit message: {type(e).__name__}: {e}")
                     print(f"[ERROR] Traceback: {traceback.format_exc()}")
@@ -557,7 +771,7 @@ Note: Automatic backup will be created before changes.
                 await event.answer("Draft deleted", alert=False)
                 # Update message to show skipped
                 try:
-                    # CORRECT: Use (await event.get_message()).text
+                    # For CallbackQuery, fetch message asynchronously
                     message = await event.get_message()
                     message_text = message.text or ""
                     await event.edit(
@@ -652,43 +866,128 @@ Note: Automatic backup will be created before changes.
             print(f"[DRAFT ERROR] Traceback:\n{traceback.format_exc()}")
 
     async def approve_and_send(self, chat_id: int, event):
-        """Approve and send the draft"""
-        draft = draft_system.get_draft(chat_id)
+        """
+        Approve and send the draft using DIRECT method (same as Quick_test.py)
 
-        if not draft:
-            await event.answer("Draft not found", alert=True)
-            try:
-                message = await event.get_message()
-                await event.edit("Draft not found - already deleted?")
-            except Exception as e:
-                print(f"[ERROR] Failed to edit message: {e}")
-            return
+        This uses the exact working TelegramClient method proven in Quick_test.py:
+        - Create TelegramClient('aibi_session')
+        - Connect
+        - Send message
+        - Disconnect
 
+        ENHANCEMENTS:
+        - Logs approved replies for Knowledge Base analysis
+        - Detects meeting requests and auto-creates Google Calendar events
+        """
+        # Get draft from AI message (extract from button callback message)
         try:
-            print(f"[DRAFT BOT] Sending draft to chat {chat_id}...")
+            # For CallbackQuery, fetch message asynchronously
+            message = await event.get_message()
+            message_text = message.text or ""
 
-            # CRITICAL FIX: Fetch the entity first before sending
+            # Extract chat title and original message for logging
+            chat_title = "Unknown"
+            original_message = ""
+            if "NEW MESSAGE from" in message_text:
+                try:
+                    chat_title = message_text.split("NEW MESSAGE from ")[1].split(" (")[0].strip()
+                    original_message = message_text.split("MESSAGE:\n")[1].split("\n\nAI DRAFT:")[0].strip()
+                except:
+                    pass
+
+            # Extract AI draft from notification message
+            # Format: "NEW MESSAGE from...\n\nMESSAGE:\n...\n\nAI DRAFT:\n{draft}\n\nChoose action:"
+            if "AI DRAFT:" in message_text:
+                draft_text = message_text.split("AI DRAFT:")[1].split("\n\nChoose action:")[0].strip()
+            else:
+                # Fallback: try to get from draft_system
+                draft = draft_system.get_draft(chat_id)
+                if draft:
+                    draft_text = draft["draft"]
+                    chat_title = draft.get("chat_title", "Unknown")
+                    original_message = draft.get("original_message", "")
+                else:
+                    await event.answer("Draft not found", alert=True)
+                    await event.edit("Draft not found - already deleted?")
+                    return
+
+            print(f"[DRAFT BOT] [DIRECT SEND] Sending to chat {chat_id}")
+            print(f"[DRAFT BOT] [DIRECT SEND] Message length: {len(draft_text)} chars")
+
+            # DIRECT METHOD - Same as Quick_test.py (proven to work)
+            from telethon import TelegramClient
+
+            api_id = int(os.getenv("TG_API_ID"))
+            api_hash = os.getenv("TG_API_HASH")
+
+            print(f"[DRAFT BOT] [DIRECT SEND] Creating TelegramClient with aibi_session")
+            client = TelegramClient('aibi_session', api_id, api_hash)
+
             try:
-                entity = await self.client.get_entity(chat_id)
-                print(f"[DRAFT BOT] Entity fetched for chat {chat_id}: {entity}")
-            except Exception as e:
-                print(f"[ERROR] Failed to get entity for {chat_id}: {e}")
-                await event.answer("Error: Cannot resolve recipient", alert=True)
-                return
+                print(f"[DRAFT BOT] [DIRECT SEND] Connecting...")
+                await client.connect()
 
-            # Now send the message to the resolved entity
-            try:
-                await self.client.send_message(entity, draft["draft"])
-                print(f"[DRAFT BOT] Message sent to entity successfully")
+                if not await client.is_user_authorized():
+                    raise Exception("Session not authorized")
 
-                # Success! Update UI with confirmation
+                print(f"[DRAFT BOT] [DIRECT SEND] Sending message to {chat_id}...")
+                # EXACT same call that worked in Quick_test.py
+                await client.send_message(chat_id, draft_text)
+
+                print(f"[DRAFT BOT] [DIRECT SEND] [SUCCESS] Message sent!")
+
+                # === ENHANCEMENT 1: Log approved reply for Knowledge Base ===
+                # === AI SELF-LEARNING: Capture Success Pattern ===
+                try:
+                    kb_storage = get_knowledge_base()
+                    confidence = 90  # Default confidence for manually approved replies
+
+                    # Save to successful_replies.json
+                    success = kb_storage.add_successful_reply(
+                        chat_id=chat_id,
+                        chat_title=chat_title,
+                        client_question=original_message,
+                        approved_response=draft_text,
+                        confidence=confidence
+                    )
+
+                    if success:
+                        print(f"[AI LEARNING] ✓ Success pattern captured from '{chat_title}'")
+                        print(f"[AI LEARNING] Total patterns: {len(kb_storage.data['replies'])}")
+                    else:
+                        print(f"[AI LEARNING] [WARN] Failed to save pattern")
+
+                except Exception as kb_error:
+                    print(f"[AI LEARNING] [ERROR] Failed to capture pattern: {kb_error}")
+                    import traceback
+                    traceback.print_exc()
+
+                # === ENHANCEMENT 2: Auto-Booking for meeting requests ===
+                try:
+                    from features.smart_enhancements import AutoBookingManager
+                    from calendar_client import GoogleCalendarClient
+
+                    calendar = GoogleCalendarClient()
+                    auto_booking = AutoBookingManager(calendar)
+
+                    meeting_info = await auto_booking.detect_meeting_request(original_message, draft_text)
+                    if meeting_info:
+                        print(f"[AUTO-BOOKING] Meeting detected! Creating calendar event...")
+                        await auto_booking.create_pending_meeting(
+                            chat_id=chat_id,
+                            chat_title=chat_title,
+                            message_text=original_message,
+                            meeting_info=meeting_info
+                        )
+                        print(f"[AUTO-BOOKING] [SUCCESS] Calendar event created for {chat_title}")
+                except Exception as booking_error:
+                    print(f"[AUTO-BOOKING] [ERROR] Failed to create event: {booking_error}")
+
+                # Success! Update UI
                 await event.answer("Message delivered!", alert=False)
                 try:
-                    # CORRECT: Use (await event.get_message()).text
-                    message = await event.get_message()
-                    message_text = message.text or ""
                     await event.edit(
-                        f"{message_text}\n\n[SUCCESS] Message sent to {draft['chat_title']}",
+                        f"{message_text}\n\n[SUCCESS] Message sent to chat {chat_id}",
                         buttons=None
                     )
                 except Exception as e:
@@ -696,20 +995,20 @@ Note: Automatic backup will be created before changes.
 
                 # Remove draft
                 draft_system.remove_draft(chat_id)
-                print(f"[DRAFT BOT] Message delivered to chat {chat_id}")
 
             except Exception as send_error:
-                print(f"[ERROR] Failed to send message: {type(send_error).__name__}: {send_error}")
+                print(f"[DRAFT BOT] [DIRECT SEND] [ERROR] {send_error}")
                 await event.answer("Failed to send message", alert=True)
                 try:
-                    message = await event.get_message()
-                    message_text = message.text or ""
                     await event.edit(
                         f"{message_text}\n\n[ERROR] Failed to send - please retry",
                         buttons=None
                     )
-                except Exception as e:
-                    print(f"[ERROR] Failed to edit message: {e}")
+                except:
+                    pass
+            finally:
+                await client.disconnect()
+                print(f"[DRAFT BOT] [DIRECT SEND] Disconnected")
 
         except Exception as e:
             print(f"[ERROR] Error in approve_and_send: {type(e).__name__}: {e}")
@@ -722,8 +1021,8 @@ Note: Automatic backup will be created before changes.
     async def handle_edit_text(self, event):
         """Handle edited text when user sends new message after EDIT button"""
         try:
-            # For NewMessage events, use await event.get_message() for proper async handling
-            message = await event.get_message()
+            # For NewMessage events, event.message is a direct property
+            message = event.message
             new_text = message.text.strip() if message.text else ""
             if not new_text:
                 return
@@ -740,14 +1039,116 @@ Note: Automatic backup will be created before changes.
 
             # Reset the waiting flag
             self.waiting_for_edit[chat_id] = False
-            await self.send_edited_message(chat_id, new_text, event)
+
+            # ENHANCED: Show confirmation button instead of sending immediately
+            draft = draft_system.get_draft(chat_id)
+            if not draft:
+                await event.reply("[ERROR] Draft not found - already sent?")
+                return
+
+            # Show new draft with confirmation button
+            confirmation_message = (
+                f"[EDITED DRAFT] for {draft['chat_title']} (ID: {chat_id})\n\n"
+                f"NEW TEXT:\n{new_text}\n\n"
+                f"Confirm to send this edited version:"
+            )
+
+            confirm_button = [
+                [Button.inline("[SEND] Confirm & Send", f"confirm_{chat_id}")]
+            ]
+
+            # Store the edited text temporarily
+            if not hasattr(self, 'pending_edits'):
+                self.pending_edits = {}
+            self.pending_edits[chat_id] = new_text
+
+            await event.reply(confirmation_message, buttons=confirm_button)
+            print(f"[DRAFT BOT] Edited draft shown with confirmation button for chat {chat_id}")
 
         except Exception as e:
             print(f"[ERROR] Error in handle_edit_text: {type(e).__name__}: {e}")
             print(f"[ERROR] Traceback: {traceback.format_exc()}")
 
+    async def send_confirmed_edit(self, chat_id: int, event):
+        """
+        Send confirmed edited message using DIRECT method (same as Quick_test.py)
+        This is called after user confirms the edited draft
+        """
+        try:
+            # Get the pending edited text
+            if not hasattr(self, 'pending_edits') or chat_id not in self.pending_edits:
+                await event.answer("Edit text not found", alert=True)
+                await event.edit("[ERROR] Edit text was lost - please try again")
+                return
+
+            edited_text = self.pending_edits[chat_id]
+            # For CallbackQuery, fetch message asynchronously
+            message = await event.get_message()
+            message_text = message.text or ""
+
+            print(f"[DRAFT BOT] [DIRECT SEND] Sending edited message to chat {chat_id}")
+            print(f"[DRAFT BOT] [DIRECT SEND] Message length: {len(edited_text)} chars")
+
+            # DIRECT METHOD - Same as Quick_test.py (proven to work)
+            from telethon import TelegramClient
+
+            api_id = int(os.getenv("TG_API_ID"))
+            api_hash = os.getenv("TG_API_HASH")
+
+            print(f"[DRAFT BOT] [DIRECT SEND] Creating TelegramClient with aibi_session")
+            client = TelegramClient('aibi_session', api_id, api_hash)
+
+            try:
+                print(f"[DRAFT BOT] [DIRECT SEND] Connecting...")
+                await client.connect()
+
+                if not await client.is_user_authorized():
+                    raise Exception("Session not authorized")
+
+                print(f"[DRAFT BOT] [DIRECT SEND] Sending edited message to {chat_id}...")
+                # EXACT same call that worked in Quick_test.py
+                await client.send_message(chat_id, edited_text)
+
+                print(f"[DRAFT BOT] [DIRECT SEND] [SUCCESS] Edited message sent!")
+
+                # Success! Update UI
+                await event.answer("Edited message delivered!", alert=False)
+                try:
+                    await event.edit(
+                        f"{message_text}\n\n[SUCCESS] Edited message sent to chat {chat_id}",
+                        buttons=None
+                    )
+                except Exception as e:
+                    print(f"[ERROR] Failed to edit message: {e}")
+
+                # Clean up
+                del self.pending_edits[chat_id]
+                draft_system.remove_draft(chat_id)
+
+            except Exception as send_error:
+                print(f"[DRAFT BOT] [DIRECT SEND] [ERROR] {send_error}")
+                await event.answer("Failed to send edited message", alert=True)
+                try:
+                    await event.edit(
+                        f"{message_text}\n\n[ERROR] Failed to send - please retry",
+                        buttons=None
+                    )
+                except:
+                    pass
+            finally:
+                await client.disconnect()
+                print(f"[DRAFT BOT] [DIRECT SEND] Disconnected")
+
+        except Exception as e:
+            print(f"[ERROR] Error in send_confirmed_edit: {type(e).__name__}: {e}")
+            print(f"[ERROR] Traceback: {traceback.format_exc()}")
+            try:
+                await event.answer(f"Error: {e}", alert=True)
+            except:
+                pass
+
     async def send_edited_message(self, chat_id: int, new_text: str, event):
-        """Send edited message to chat"""
+        """DEPRECATED: Old method - now using send_confirmed_edit with Direct Send"""
         draft = draft_system.get_draft(chat_id)
 
         if not draft:
@@ -856,9 +1257,9 @@ Note: Automatic backup will be created before changes.
         summary = f"""
 [STATS] **ANALYTICS REPORT**
 
-📁 Total Chats Processed: {total_chats}
+[DATA] Total Chats Processed: {total_chats}
 [OK] High Confidence (≥80%): {high_confidence_count}
-📝 Drafts/Replies: {drafted_count}
+[DRAFT] Drafts/Replies: {drafted_count}
 
 --------------------
 Report generation completed at {__import__('datetime').datetime.now().strftime('%Y-%m-%d %H:%M:%S')}

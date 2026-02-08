@@ -51,59 +51,104 @@ class ExcelDataCollector:
             Dictionary with all collected analytics
         """
         if not self.reports_dir.exists():
-            print(f"[EXCEL] Reports directory not found: {self.reports_dir}")
+            print(f"[EXCEL] [ERROR] Reports directory not found: {self.reports_dir}")
+            print(f"[EXCEL] [FIX] Creating reports directory...")
+            self.reports_dir.mkdir(parents=True, exist_ok=True)
             return self.data
 
         report_files = list(self.reports_dir.glob("*.txt"))
+        print(f"\n[EXCEL] ===== DATA COLLECTION START =====")
+        print(f"[EXCEL] Reports directory: {self.reports_dir.absolute()}")
         print(f"[EXCEL] Found {len(report_files)} report files")
+
+        if len(report_files) == 0:
+            print(f"[EXCEL] [WARN] No report files found - Excel will show 0% statistics")
+            print(f"[EXCEL] [TIP] Run /check command to generate reports first")
+            return self.data
 
         for report_file in report_files:
             try:
+                print(f"[EXCEL] Processing: {report_file.name}")
                 self._process_report_file(report_file)
             except Exception as e:
-                print(f"[ERROR] Failed to process {report_file.name}: {e}")
+                print(f"[EXCEL] [ERROR] Failed to process {report_file.name}: {e}")
+                import traceback
+                traceback.print_exc()
+
+        print(f"[EXCEL] ===== DATA COLLECTION COMPLETE =====")
+        print(f"[EXCEL] Total chats processed: {self.data['total_chats']}")
+        print(f"[EXCEL] Confidence scores collected: {len(self.data['confidence_scores'])}")
+        print(f"[EXCEL] Scores: {self.data['confidence_scores']}")
+        print(f"[EXCEL] =====================================\n")
 
         return self.data
 
     def _process_report_file(self, file_path: Path):
-        """Process a single report file"""
-        content = file_path.read_text(encoding="utf-8", errors="ignore")
+        """Process a single report file - Enhanced to parse Ukrainian and English formats"""
+        try:
+            content = file_path.read_text(encoding="utf-8", errors="ignore")
+        except Exception as e:
+            print(f"[EXCEL] [ERROR] Failed to read {file_path.name}: {e}")
+            return
+
         lines = content.split("\n")
 
         chat_title = file_path.stem  # Filename without .txt
         self.data["total_chats"] += 1
+
+        # Track when the file was last modified (more accurate than now())
+        processed_time = datetime.fromtimestamp(file_path.stat().st_mtime).isoformat()
+
         self.data["chats"].append({
             "title": chat_title,
             "file": file_path.name,
-            "processed_at": datetime.now().isoformat()
+            "processed_at": processed_time
         })
 
-        # Parse report content
+        # Parse report content with enhanced patterns
         for i, line in enumerate(lines):
-            # Extract confidence score
-            if "ВПЕВНЕНІСТЬ ШІ:" in line:
+            line_clean = line.strip()
+
+            # Extract confidence score (Ukrainian: "ВПЕВНЕНІСТЬ ШІ:", English: "CONFIDENCE:", "AI Confidence:")
+            if any(pattern in line for pattern in ["ВПЕВНЕНІСТЬ ШІ:", "CONFIDENCE:", "AI Confidence:"]):
                 try:
-                    confidence = int(line.split(":")[1].strip())
+                    # Try to extract percentage value
+                    import re
+                    # Match patterns like "95%", ": 95%", ": 95", "95"
+                    confidence_match = re.search(r'[:：]\s*(\d+)\s*%?', line)
+                    if confidence_match:
+                        confidence = int(confidence_match.group(1))
+                    else:
+                        # Fallback: split by colon and extract number
+                        parts = line.split(":")
+                        if len(parts) >= 2:
+                            confidence_str = parts[-1].strip().replace("%", "").split()[0]
+                            confidence = int(confidence_str)
+                        else:
+                            continue
+
                     self.data["confidence_scores"].append(confidence)
+                    print(f"[EXCEL] Extracted confidence {confidence}% from {chat_title}")
 
                     if confidence >= 80:
                         self.data["high_confidence"] += 1
 
-                except (ValueError, IndexError):
+                except (ValueError, IndexError, AttributeError) as e:
+                    print(f"[EXCEL] [WARN] Failed to parse confidence from line: '{line}' - {e}")
                     pass
 
-            # Count auto-replies
-            elif "AUTO-REPLY SENT" in line:
+            # Count auto-replies (multiple language patterns)
+            elif any(pattern in line.upper() for pattern in ["AUTO-REPLY", "АВТОВІДПОВІДЬ", "[SUCCESS]", "MESSAGE SENT"]):
                 self.data["auto_replies"] += 1
 
-            # Count drafts
-            elif "DRAFT FOR REVIEW" in line:
+            # Count drafts (multiple language patterns)
+            elif any(pattern in line.upper() for pattern in ["DRAFT", "ЧЕРНЕТКА", "[REVIEW]", "FOR APPROVAL"]):
                 self.data["drafts"] += 1
 
-            # Collect questions/insights
-            elif any(keyword in line.lower() for keyword in ["питання", "запитання", "вопрос"]):
-                if line.strip() and not line.startswith("["):
-                    self.data["customer_questions"].append(line.strip())
+            # Collect questions/insights (Ukrainian and English)
+            elif any(keyword in line_clean.lower() for keyword in ["питання", "запитання", "вопрос", "question", "ask", "inquir"]):
+                if line_clean and not line_clean.startswith("[") and len(line_clean) > 10:
+                    self.data["customer_questions"].append(line_clean[:200])
 
     # ========================================================================
     # STATISTICS CALCULATION

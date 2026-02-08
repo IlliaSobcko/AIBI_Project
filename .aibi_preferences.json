@@ -1,0 +1,8 @@
+{
+  "default_date_hours": 24,
+  "auto_scheduler_enabled": true,
+  "analysis_cache_ttl_hours": 1,
+  "authenticated": true,
+  "last_auth": "2026-02-07T16:45:25.960859",
+  "favorite_chats": []
+}

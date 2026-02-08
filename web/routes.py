@@ -107,12 +107,40 @@ def api_get_chats():
         }
     """
     try:
-        from main import fetch_chats_only
+        from main import fetch_chats_only, DRAFT_BOT
 
+        # Get date range parameters (but convert to hours for fetch_chats_only)
         start_date, end_date = get_date_range_from_request()
 
-        # Run async function with thread-safe wrapper
-        chats = run_async(fetch_chats_only(limit=50))
+        # Calculate hours difference for filtering
+        time_diff = end_date - start_date
+        hours_ago = int(time_diff.total_seconds() / 3600)  # Convert to hours
+        print(f"[API] [/api/chats] Fetching chats from last {hours_ago} hours")
+        print(f"[API] [/api/chats] Date range: {start_date} to {end_date}")
+
+        # Check bot connection status
+        bot_connected = DRAFT_BOT is not None and hasattr(DRAFT_BOT, 'client') and DRAFT_BOT.client is not None
+
+        # If bot is not connected, still try to fetch from aibi_session directly
+        # FIX: Remove bot dependency - fetch directly from authenticated session
+        if not bot_connected:
+            print(f"[API] [/api/chats] WARNING: Bot not connected, using direct session access")
+            # Continue to fetch_chats_only which uses aibi_session directly
+
+        # FIX: Always fetch chats - don't block on bot connection
+        if False:  # Disabled - always try to fetch
+            return jsonify({
+                "chats": [],
+                "total_chats": 0,
+                "start_date": start_date.isoformat(),
+                "end_date": end_date.isoformat(),
+                "status": "connecting",
+                "message": "Telegram bot is still connecting... Please wait 30 seconds and refresh."
+            }), 200
+
+        # FIX: Pass hours_ago parameter to fetch only chats with recent activity
+        print(f"[API] [/api/chats] Calling fetch_chats_only with hours_ago={hours_ago}")
+        chats = run_async(fetch_chats_only(limit=100, hours_ago=hours_ago))
 
         # Convert ChatInfo objects to dictionaries for JSON response
         chat_dicts = [
@@ -132,13 +160,21 @@ def api_get_chats():
             "chats": chat_dicts,
             "total_chats": len(chat_dicts),
             "start_date": start_date.isoformat(),
-            "end_date": end_date.isoformat()
+            "end_date": end_date.isoformat(),
+            "status": "connected"
         }), 200
 
     except Exception as e:
         import traceback
         traceback.print_exc()
-        return jsonify({"error": str(e)}), 500
+        # Return user-friendly error instead of 500
+        return jsonify({
+            "chats": [],
+            "total_chats": 0,
+            "status": "error",
+            "error": str(e),
+            "message": "Failed to fetch chats. Bot may still be connecting."
+        }), 200  # Return 200 so UI doesn't break
 
 
 @api_bp.route('/analyze', methods=['POST'])
@@ -422,9 +458,15 @@ def api_scheduler_status():
 def api_send_reply():
     """
     POST /api/send_reply
-    Send reply via Telegram using global bot registry
+    DIRECT METHOD - Uses TelegramClient('aibi_session') exactly like Quick_test.py
+
+    This is the EXACT same method that successfully sent messages in Quick_test.py.
+    No bot registry, no wrappers, no complexity - just direct TelegramClient.
     """
     try:
+        from telethon import TelegramClient
+        import os
+
         data = request.get_json()
         if not data or 'chat_id' not in data or 'reply_text' not in data:
             return jsonify({"error": "Missing chat_id or reply_text"}), 400
@@ -435,52 +477,91 @@ def api_send_reply():
         if not reply_text.strip():
             return jsonify({"error": "Reply text cannot be empty"}), 400
 
-        # Get bot from global registry
-        async def send_msg():
-            from main import BOT_REGISTRY
+        print(f"[WEB] [DIRECT SEND] Sending to chat {chat_id}")
+        print(f"[WEB] [DIRECT SEND] Using aibi_session (same as Quick_test.py)")
 
-            bot = BOT_REGISTRY.get_bot()
-            if not bot:
-                raise Exception("Telegram bot not initialized - bot not started")
+        # EXACT method from Quick_test.py that worked
+        async def send_direct():
+            api_id = int(os.getenv("TG_API_ID"))
+            api_hash = os.getenv("TG_API_HASH")
 
-            if not bot.tg_service:
-                raise Exception("Telegram service not initialized")
+            print(f"[WEB] [DIRECT SEND] Creating TelegramClient with aibi_session")
+            client = TelegramClient('aibi_session', api_id, api_hash)
 
             try:
-                # Send message using the bot's telegram service
-                success = await bot.tg_service.send_message(chat_id, reply_text)
-                if success:
-                    return {"success": True, "message": f"Reply sent to chat {chat_id}"}
-                else:
-                    raise Exception("Failed to send message via TelegramService")
-            except Exception as e:
-                print(f"[WEB] Send error: {e}")
-                raise Exception(f"Failed to send message: {str(e)}")
+                print(f"[WEB] [DIRECT SEND] Connecting to Telegram...")
+                await client.connect()
 
-        # Get event loop from registry to execute in bot's context
-        bot_loop = None
-        try:
-            from main import BOT_REGISTRY
-            bot_loop = BOT_REGISTRY.get_event_loop()
-        except:
-            pass
+                # Check authorization
+                if not await client.is_user_authorized():
+                    raise Exception("Session not authorized. Run manual_phone_auth.py first.")
 
-        if bot_loop and bot_loop.is_running():
-            # Submit task to bot's event loop
-            import concurrent.futures
-            future = asyncio.run_coroutine_threadsafe(send_msg(), bot_loop)
-            result = future.result(timeout=10)
-        else:
-            # Fallback: run in current event loop
-            result = run_async(send_msg())
+                print(f"[WEB] [DIRECT SEND] Sending message to {chat_id}...")
+                # EXACT same call that worked in Quick_test.py
+                await client.send_message(chat_id, reply_text)
 
-        print(f"[WEB] Reply sent to chat {chat_id}")
+                print(f"[WEB] [DIRECT SEND] [SUCCESS] Message sent successfully!")
+                return {"success": True, "message": f"Message sent to {chat_id}"}
+
+            finally:
+                await client.disconnect()
+                print(f"[WEB] [DIRECT SEND] Disconnected")
+
+        # Run in current event loop
+        result = run_async(send_direct())
         return jsonify(result), 200
 
     except Exception as e:
         import traceback
         traceback.print_exc()
-        return jsonify({"error": f"Send reply failed: {str(e)}"}), 500
+        return jsonify({"error": f"Send failed: {str(e)}"}), 500
+
+
+@api_bp.route('/messages', methods=['GET'])
+def api_get_messages():
+    """
+    GET /api/messages?chat_id=<optional>&limit=20
+
+    Get messages from Telegram listener
+
+    Returns:
+        {
+            "<chat_id>": [
+                {
+                    "message_id": 12345,
+                    "sender_id": 123456789,
+                    "sender_name": "John",
+                    "text": "Message preview...",
+                    "date": "2026-02-07T12:00:00"
+                },
+                ...
+            ]
+        }
+    """
+    try:
+        from main import BOT_REGISTRY
+
+        chat_id = request.args.get('chat_id')
+        limit = request.args.get('limit', 20, type=int)
+
+        if chat_id:
+            try:
+                chat_id = int(chat_id)
+            except ValueError:
+                return jsonify({"error": "Invalid chat_id"}), 400
+
+        messages = BOT_REGISTRY.get_messages(chat_id=chat_id, limit=limit)
+
+        return jsonify({
+            "messages": messages,
+            "total_chats": len(messages),
+            "limit": limit
+        }), 200
+
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({"error": str(e)}), 500
 
 
 @api_bp.route('/analytics_download', methods=['GET'])
@@ -561,6 +642,93 @@ def api_knowledge_base():
         import traceback
         traceback.print_exc()
         return jsonify({"error": str(e)}), 500
+
+
+@api_bp.route('/generate_faq', methods=['POST'])
+def api_generate_faq():
+    """
+    POST /api/generate_faq
+
+    Generate FAQ from successful reply patterns (AI Self-Learning)
+
+    Returns:
+        {
+            "success": true,
+            "total_patterns": 25,
+            "topics_identified": 5,
+            "file_path": "/path/to/dynamic_instructions.txt",
+            "message": "Knowledge base updated with 25 new successful cases!"
+        }
+    """
+    try:
+        from knowledge_base_storage import get_knowledge_base
+
+        kb_storage = get_knowledge_base()
+
+        # Get statistics
+        stats = kb_storage.get_statistics()
+        total_patterns = stats['total_patterns']
+
+        if total_patterns == 0:
+            return jsonify({
+                "success": False,
+                "error": "No successful patterns found yet. Approve some drafts first!"
+            }), 400
+
+        # Generate FAQ
+        result = kb_storage.generate_faq("dynamic_instructions.txt")
+
+        if result['success']:
+            return jsonify({
+                "success": True,
+                "total_patterns": result['total_patterns'],
+                "topics_identified": result['topics_identified'],
+                "file_path": result['file_path'],
+                "message": f"Knowledge base updated with {result['total_patterns']} new successful cases!"
+            }), 200
+        else:
+            return jsonify({
+                "success": False,
+                "error": result.get('error', 'Unknown error')
+            }), 500
+
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@api_bp.route('/knowledge_stats', methods=['GET'])
+def api_knowledge_stats():
+    """
+    GET /api/knowledge_stats
+
+    Get AI Self-Learning statistics
+
+    Returns:
+        {
+            "total_patterns": 25,
+            "last_updated": "2026-02-07T22:00:00",
+            "clients_helped": 8,
+            "most_used": [...],
+            "recent": [...]
+        }
+    """
+    try:
+        from knowledge_base_storage import get_knowledge_base
+
+        kb_storage = get_knowledge_base()
+        stats = kb_storage.get_statistics()
+
+        return jsonify({
+            "success": True,
+            "stats": stats
+        }), 200
+
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({"success": False, "error": str(e)}), 500
 
 
 @api_bp.route('/general_stats', methods=['GET'])
